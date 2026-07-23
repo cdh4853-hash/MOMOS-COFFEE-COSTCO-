@@ -1,0 +1,3560 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>코스트코 생산·재고·출고 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#1c2a3a;
+    --navy-2:#243447;
+    --paper:#f5f6f8;
+    --card:#ffffff;
+    --line:#e2e5ea;
+    --ink:#1c2430;
+    --ink-soft:#5a6472;
+    --accent:#c17a3d;
+    --accent-dark:#a5652f;
+    --blue:#2563eb;
+    --green:#1a9e6b;
+    --amber:#d18d1a;
+    --red:#d64545;
+    --gray:#8b93a1;
+    --radius:10px;
+    --shadow:0 1px 3px rgba(20,26,38,.08), 0 1px 2px rgba(20,26,38,.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    font-size:14px;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;font-size:14px;}
+  a{color:inherit;}
+
+  /* ---------- 로그인 화면 ---------- */
+  #loginScreen{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(160deg,var(--navy) 0%,#101823 100%);
+    padding:20px;
+  }
+  .login-card{
+    width:100%;max-width:380px;background:var(--card);border-radius:16px;
+    padding:36px 32px;box-shadow:0 20px 60px rgba(0,0,0,.35);
+  }
+  .login-card .brand{
+    font-size:13px;letter-spacing:.14em;color:var(--accent-dark);font-weight:700;text-transform:uppercase;margin-bottom:6px;
+  }
+  .login-card h1{font-size:22px;margin-bottom:4px;}
+  .login-card .sub{color:var(--ink-soft);font-size:13px;margin-bottom:24px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12.5px;color:var(--ink-soft);margin-bottom:6px;font-weight:600;}
+  .field input,.field select,.field textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);
+    outline:none;transition:border-color .15s;
+  }
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:10px 16px;border-radius:8px;border:1px solid transparent;font-weight:600;font-size:13.5px;
+    transition:filter .12s, background .12s; white-space:nowrap;
+  }
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:hover{filter:brightness(1.06);}
+  .btn-primary:disabled{opacity:.55;cursor:not-allowed;}
+  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink);}
+  .btn-ghost:hover{background:#f2f3f5;}
+  .btn-danger{background:#fff;border-color:#f1c3c3;color:var(--red);}
+  .btn-danger:hover{background:#fdf1f1;}
+  .btn-block{width:100%;}
+  .btn-sm{padding:6px 10px;font-size:12.5px;border-radius:6px;}
+  .login-error{
+    background:#fdf1f1;border:1px solid #f1c3c3;color:var(--red);padding:10px 12px;border-radius:8px;
+    font-size:12.5px;margin-bottom:14px;display:none;
+  }
+
+  /* ---------- 앱 셸 ---------- */
+  #appShell{display:none;min-height:100vh;}
+  .shell-grid{display:grid;grid-template-columns:250px 1fr;min-height:100vh;}
+  .sidebar{
+    background:#fff;color:var(--ink);padding:20px 14px;position:sticky;top:0;height:100vh;overflow-y:auto;
+    border-right:1px solid var(--line);
+  }
+  .sidebar .brand{padding:4px 4px 20px;}
+  .sidebar .brand .t1{font-size:11px;letter-spacing:.14em;color:var(--ink-soft);text-transform:uppercase;font-weight:700;}
+  .sidebar .brand .t2{font-size:16px;font-weight:700;color:var(--ink);margin-top:2px;}
+  .nav-item{
+    display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:2px;
+    color:var(--ink-soft);font-size:13.5px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;
+  }
+  .nav-item .ic{width:18px;text-align:center;font-size:15px;}
+  .nav-item:hover{background:var(--paper);color:var(--ink);}
+  .nav-item.active{background:var(--accent);color:#fff;}
+  .sidebar-foot{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);}
+  .who{font-size:12.5px;color:var(--ink-soft);padding:0 10px;margin-bottom:8px;line-height:1.5;}
+  .who b{color:var(--ink);display:block;font-size:13.5px;}
+
+  .main-col{display:flex;flex-direction:column;min-width:0;}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;padding:14px 24px;
+    background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;
+  }
+  .topbar .hamburger{display:none;background:none;border:none;font-size:20px;padding:4px 8px;color:var(--ink);}
+  .page-title{font-size:18px;}
+  .content{padding:22px 24px 60px;}
+
+  /* ---------- 카드/그리드 ---------- */
+  .cards-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+  .stat-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);
+    border-left:4px solid var(--gray);
+  }
+  .stat-card.c-blue{border-left-color:var(--blue);}
+  .stat-card.c-green{border-left-color:var(--green);}
+  .stat-card.c-amber{border-left-color:var(--amber);}
+  .stat-card.c-red{border-left-color:var(--red);}
+  .stat-card .lbl{font-size:12px;color:var(--ink-soft);font-weight:600;margin-bottom:6px;}
+  .stat-card .val{font-size:24px;font-weight:800;}
+  .stat-card .val small{font-size:13px;font-weight:600;color:var(--ink-soft);margin-left:2px;}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px;}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);gap:10px;flex-wrap:wrap;}
+  .panel-head h3{font-size:15px;}
+  .panel-body{padding:16px 18px;}
+  .panel-body.pad0{padding:0;}
+
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .toolbar input,.toolbar select{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;}
+  .spacer{flex:1;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:left;padding:10px 12px;background:#fafbfc;color:var(--ink-soft);font-weight:700;font-size:11.5px;
+    text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  tbody td{padding:10px 12px;border-bottom:1px solid #eef0f3;vertical-align:middle;}
+  tbody tr:hover{background:#fbfaf8;}
+  .table-wrap{overflow-x:auto;}
+  .empty-row{padding:36px 20px;text-align:center;color:var(--ink-soft);font-size:13px;}
+  .inv-num{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--line);text-underline-offset:3px;}
+  .inv-num:hover{background:#f2f5fa;}
+
+  .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:99px;font-size:11.5px;font-weight:700;white-space:nowrap;}
+  .b-gray{background:#eef0f3;color:#5a6472;}
+  .b-blue{background:#e6eefd;color:#2563eb;}
+  .b-green{background:#e4f6ee;color:#1a9e6b;}
+  .b-amber{background:#fdf2df;color:#b5790f;}
+  .b-red{background:#fbe7e7;color:#c23636;}
+  .b-navy{background:#e3e8ee;color:#1c2a3a;}
+
+  .warn-list{list-style:none;margin:0;padding:0;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;}
+  .cal-grid-head{margin-bottom:8px;}
+  .cal-headcell{text-align:center;font-size:12px;font-weight:700;color:var(--ink-soft);padding:4px 0;}
+  .cal-cell{
+    min-height:104px;border:1px solid var(--line);border-radius:8px;padding:6px 6px 8px;background:#fff;
+    display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:box-shadow .12s, border-color .12s;
+  }
+  .cal-cell:hover{box-shadow:0 2px 8px rgba(20,26,38,.10);border-color:var(--accent);}
+  .cal-cell-out{background:#fafbfc;color:var(--gray);cursor:default;}
+  .cal-cell-out:hover{box-shadow:none;border-color:var(--line);}
+  .cal-cell-today{border-color:var(--accent);box-shadow:0 0 0 2px rgba(193,122,61,.18) inset;}
+  .cal-daynum{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:4px;}
+  .cal-today-chip{background:var(--accent);color:#fff;font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:99px;}
+  .cal-tags{display:flex;flex-direction:column;gap:2px;}
+  .cal-tag{font-size:10.5px;font-weight:700;border-radius:5px;padding:1.5px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cal-tag b{font-weight:700;}
+  .cal-tag-plan{background:#e6eefd;color:#2563eb;}
+  .cal-tag-plandone{background:#ecfdf5;color:#0d9488;border:1px solid #99f6e4;}
+  .cal-tag-amber{background:#fdf2df;color:#b5790f;}
+  .cal-details{margin-top:4px;}
+  .cal-details summary{list-style:none;cursor:pointer;font-size:10px;color:var(--accent-dark);font-weight:700;padding:1px 0;}
+  .cal-details summary::-webkit-details-marker{display:none;}
+  .cal-details[open] summary{margin-bottom:4px;}
+  .cal-details-body{display:flex;flex-direction:column;gap:4px;padding:6px;background:#fafbfc;border-radius:6px;border:1px solid var(--line);}
+  .cal-details-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+  .cal-details-lbl{font-size:10px;font-weight:700;color:var(--ink-soft);margin-right:2px;min-width:44px;}
+  .prod-date-group{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;overflow:hidden;}
+  .prod-date-group summary{list-style:none;cursor:pointer;padding:10px 14px;background:#fafbfc;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .prod-date-group summary::-webkit-details-marker{display:none;}
+  .prod-date-group summary::before{content:'▸';color:var(--ink-soft);font-size:11px;margin-right:2px;}
+  .prod-date-group[open] summary::before{content:'▾';}
+  .prod-date-group[open] summary{border-bottom:1px solid var(--line);}
+  .prod-date-label{font-weight:700;font-size:13.5px;color:var(--ink);}
+  .prod-date-meta{font-size:12px;color:var(--ink-soft);}
+  .prod-date-meta b{color:var(--ink);font-weight:700;}
+  .cal-tag-green{background:#e4f6ee;color:#1a9e6b;}
+  .cal-stock{margin-top:auto;font-size:10.5px;color:var(--ink-soft);display:flex;flex-wrap:wrap;gap:3px;}
+  .cal-cstock{display:inline-flex;font-size:10px;font-weight:700;border-radius:5px;padding:1.5px 5px;white-space:nowrap;}
+  .cal-cstock-pos{background:#e4f6ee;color:#1a9e6b;}
+  .cal-cstock-neg{background:#fbe7e7;color:#c23636;}
+  .cal-cstock-zero{background:#eef0f3;color:var(--ink-soft);}
+  .cal-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--ink-soft);align-items:center;}
+  .cal-legend span{display:inline-flex;align-items:center;gap:4px;}
+  .cal-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .warn-list li{
+    display:flex;align-items:flex-start;gap:10px;padding:10px 4px;border-bottom:1px solid #f1f2f4;font-size:13px;
+  }
+  .warn-list li:last-child{border-bottom:none;}
+  .warn-dot{width:8px;height:8px;border-radius:50%;background:var(--red);margin-top:5px;flex:none;}
+
+  /* ---------- 모달 ---------- */
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(15,20,28,.5);z-index:100;align-items:flex-start;justify-content:center;
+    padding:40px 16px;overflow-y:auto;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal-box{background:#fff;border-radius:14px;width:100%;max-width:640px;box-shadow:0 24px 60px rgba(0,0,0,.3);margin-bottom:40px;}
+  .modal-box.wide{max-width:920px;}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);}
+  .modal-head h3{font-size:16px;}
+  .modal-close{background:none;border:none;font-size:20px;color:var(--ink-soft);padding:4px 8px;}
+  .modal-body{padding:20px 22px;max-height:70vh;overflow-y:auto;}
+  .modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:16px 22px;border-top:1px solid var(--line);}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .form-grid .full{grid-column:1/-1;}
+  @media(max-width:560px){.form-grid{grid-template-columns:1fr;}}
+
+  .sub-table-actions{display:flex;gap:6px;}
+  .item-row-card{border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:#fafbfc;}
+  .item-row-card .form-grid{grid-template-columns:repeat(3,1fr);}
+  @media(max-width:700px){.item-row-card .form-grid{grid-template-columns:1fr 1fr;}}
+
+  /* ---------- 토스트 ---------- */
+  #toastRoot{position:fixed;bottom:20px;right:20px;z-index:200;display:flex;flex-direction:column;gap:8px;}
+  .toast{
+    background:#1c2430;color:#fff;padding:11px 16px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+    min-width:220px;display:flex;align-items:center;gap:8px;animation:toastIn .18s ease-out;
+  }
+  .toast.ok{background:#16794f;}
+  .toast.err{background:#b23434;}
+  @keyframes toastIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+  .empty-state{text-align:center;padding:50px 20px;color:var(--ink-soft);}
+  .empty-state .ic{font-size:34px;margin-bottom:10px;}
+
+  .helper-text{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+  .progress-bar{width:100%;height:7px;background:#eef0f3;border-radius:99px;overflow:hidden;}
+  .progress-bar .fill{height:100%;background:var(--green);border-radius:99px;transition:width .2s;}
+  .lot-row{display:grid;grid-template-columns:2fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px;}
+  @media(max-width:700px){.lot-row{grid-template-columns:1fr 1fr auto;}}
+  .lot-row input{padding:8px 9px;border:1px solid var(--line);border-radius:6px;}
+  .lot-sum{font-size:12.5px;color:var(--ink-soft);margin-top:6px;}
+  .lot-sum b{color:var(--ink);}
+
+  .mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:29;}
+  @media(max-width:900px){
+    .shell-grid{grid-template-columns:1fr;}
+    .sidebar{
+      position:fixed;left:0;top:0;bottom:0;width:230px;transform:translateX(-100%);transition:transform .2s;z-index:30;
+    }
+    .sidebar.open{transform:translateX(0);}
+    .topbar .hamburger{display:inline-block;}
+    .mobile-overlay.open{display:block;}
+    .content{padding:16px;}
+    .cards-row{grid-template-columns:repeat(2,1fr);}
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== 로그인 화면 ===================== -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="brand" style="text-align:center;margin-bottom:4px;">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGIAAAAoCAYAAAAFZi8EAAAGkUlEQVR4nO1aTYhlRxX+vnPq3te9ssUI88T2BxuyimRE0AwuOiG4lRfstQQ6GxeTLNNxbSNIFj2CmzG4nu7grNxmZmG3DIiEuBEcCXbHZCMkA4GJ827VcdG3Xoo779atNz2RoPeDC+9xz/1OnTpV51TVKWDEiBEjRowoRCUyq1UPVGQrJ6ciW7XqQSUyK+EVcqNW3Vtz7nTNOWuf01p1T8iNQo71WvWgVj0g6XKytepeiR0AQNJVqrsT546TttlE9dCJXCbAkvYR4FIe544r1d1SO6MBB5FAyPVlMkKuR5la9WCIs1LdTRu27KlUd4d4hNwo0VuJzKKcE9nOcarI1lDbJs4d9/VFBAF2BtnSZ6g9C6SOmKgedkcDAaYeH3JE2intqFgYJOR66qSh2ZU6os8oJaelhncdq+Q0tbN10mlfX6RwIpfjLO+OfCHXncj2mnOnQzN5gdQRy0ZqG16sxBEkXZTLhYh0VOYa2nVEO2sXRrf6TksdEW2tVfcyOtcjZ86GtqNtonrYJ5OD9L3wZi8BgJLX40hRkS0h9wHAh/DCIDn5DQAwsyMfwt1eXSHcNbOj9Jscgtm1YHYNACrV38eRWom8DmDTgJPIN9C+qwAwD+GXGV33mxB+BABK7vTJGfAeAJDcmTh3XKseOJHt+Cg5zc2ofkeE8GZ0RqV6R8lpJfJW++4Fb3ZryFACXwUAb/brIdkoE78Zwtz7VwCcEbhSqb7qRLYXHev98wZ8kPs+DZFm1uRkg9m77c9Lve0P4W4cnASuCHnVidyKT6X6/sS5f/TNqmy8arx/Q1R/SHKnUn2/bfTRPISbJSuAOEqU/GkD3M7JCvlM+/PeEG/LbQ+8/3at+qGQ+8LzwdaE8J1gdn/o+1SGAA2wPlmST5S0aR7CzcasEuDLJJ9Mvt8S8kUCVyqRt0IIX8/pA/Bp3IwdncbINNnEeF2aI3KOS2N/SY5IdcbY3I310Y5cjpioHg6t2NLFiRO5nLO1713kyfVFb2iKCGb35yE8BwBz7783NI1TmFkTw1ut+k53TU6ATuRyrfpOq+u1VfgBoAnhdjC7ZsDJ3PtfrPjty8B5HqxV97qd2e59bhC4AuDMh/B2H1cl8vrEuWMV2VqWC0iu5dpStJTyIdyF2Ve8WTbuLkMa3pzIn50IYiJlkvzM7GjVjoyYe/8KybXB6d6BN/uAITzrRG4JuT9R3W8T/Z9ivmlx9sD7J/v4CZDkd9vQ8ze0NsY8RWAabTWzo2D20WDj4s56aAMTd7mlO2sV2eruOONmqXSTs4rO0hOClnejuyyPobhS3S1Z+8fZHcPdsqdW3etbORVt3R8n2tHzBQAws3urjuLPGu0AnBjw8aphMiK1MaJoFowYMWLEiBEjRowYMWLECshu6Eg6JX/QnoxeAoBgdjOY3Sk54ewoooh8S8htAk8BgAF/CWa3Qwh/L9nYxfasohc4P4+6KGeOI6LkhMCb/WHZRrHXEZXITEV+1/c+mF1rQni1xCFKTivVOwA2e0TO5iE8lyseAYujiA+H9HXxSdP0F2QKOXMcEWvODQ6mB95/cdkue+kZSqW6q+R14LzDvdmvzOxfJJ8QclvJ60JerVVnnzTN13KKWyec1zKAEx/Cz4LZ2wAg5NMq8vPFYVnhwWLkAYD4vTd7ycyyjizlvCiaEJ7N6Pm4iCStDfQdmJF03WJ7H2Ito1Ld7TvwSi4QnGbLiUvqEd36yaooqauUIvbbo3z70IxQkR8D5zXrvlBhZs0D718eIm87Z9OAk8b7N/rywNz734hzL7YlxktDs4LANHY8gWmr65sA3u3Klh62pZwd/HvVfPhYeC46wlLE6lnJnaV47ab0+kvpM6R3iHOVmXIRnrI7Nv8NkF9aQfosmN0EACFnADbTQswjYsGZwsxur0oUb5hciCfG69xdn1IkNwKzsT+9JVdS2/5fzBEP1ax9CG+2DdzvCxMEWInMhkJOMLvflkU3a9UbyypdbeK/gTaX/L8WUB7qmGD2UdPWcZ3ILRU5CWa/jUtDIWdpPbcBepMwAMxD+Emt+n2SOxPVnWD2WjD7Y8v1TLywBuBs7v3zj9m+Ygg5q1V735csTiJys6t077WAktNlNeZFrVn1sGT5Cnxaa84lsqEaecvzmYWmiyZ9IJ+sh64VDe4WhdwQ8un434D3zOyfqy7pgMVxwlMAYj33XjD7aylXUgteLAUXNeZHrH8vqy8vQ0nILLp09zms048YMWLEiM83/gPnEXPaE9Pk3QAAAABJRU5ErkJggg==" alt="MOMOS COFFEE" style="max-width:170px;width:100%;height:auto;margin:0 auto 10px;display:block;">
+      <div style="font-size:12px;color:var(--ink-soft);line-height:1.5;">모모스커피(주) 사내용<br>코스트코 발주관리 프로그램</div>
+    </div>
+    <div class="login-error" id="loginError"></div>
+    <div class="field">
+      <label>이메일</label>
+      <input type="email" id="loginEmail" placeholder="you@momoscoffee.com" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>비밀번호</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-block" id="loginBtn" onclick="handleLogin()">로그인</button>
+  </div>
+</div>
+
+<!-- ===================== 앱 셸 ===================== -->
+<div id="appShell">
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar(false)"></div>
+  <div class="shell-grid">
+    <div class="sidebar" id="sidebar">
+      <div class="brand" style="text-align:center;">
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGIAAAAoCAYAAAAFZi8EAAAGkUlEQVR4nO1aTYhlRxX+vnPq3te9ssUI88T2BxuyimRE0AwuOiG4lRfstQQ6GxeTLNNxbSNIFj2CmzG4nu7grNxmZmG3DIiEuBEcCXbHZCMkA4GJ827VcdG3Xoo779atNz2RoPeDC+9xz/1OnTpV51TVKWDEiBEjRowoRCUyq1UPVGQrJ6ciW7XqQSUyK+EVcqNW3Vtz7nTNOWuf01p1T8iNQo71WvWgVj0g6XKytepeiR0AQNJVqrsT546TttlE9dCJXCbAkvYR4FIe544r1d1SO6MBB5FAyPVlMkKuR5la9WCIs1LdTRu27KlUd4d4hNwo0VuJzKKcE9nOcarI1lDbJs4d9/VFBAF2BtnSZ6g9C6SOmKgedkcDAaYeH3JE2intqFgYJOR66qSh2ZU6os8oJaelhncdq+Q0tbN10mlfX6RwIpfjLO+OfCHXncj2mnOnQzN5gdQRy0ZqG16sxBEkXZTLhYh0VOYa2nVEO2sXRrf6TksdEW2tVfcyOtcjZ86GtqNtonrYJ5OD9L3wZi8BgJLX40hRkS0h9wHAh/DCIDn5DQAwsyMfwt1eXSHcNbOj9Jscgtm1YHYNACrV38eRWom8DmDTgJPIN9C+qwAwD+GXGV33mxB+BABK7vTJGfAeAJDcmTh3XKseOJHt+Cg5zc2ofkeE8GZ0RqV6R8lpJfJW++4Fb3ZryFACXwUAb/brIdkoE78Zwtz7VwCcEbhSqb7qRLYXHev98wZ8kPs+DZFm1uRkg9m77c9Lve0P4W4cnASuCHnVidyKT6X6/sS5f/TNqmy8arx/Q1R/SHKnUn2/bfTRPISbJSuAOEqU/GkD3M7JCvlM+/PeEG/LbQ+8/3at+qGQ+8LzwdaE8J1gdn/o+1SGAA2wPlmST5S0aR7CzcasEuDLJJ9Mvt8S8kUCVyqRt0IIX8/pA/Bp3IwdncbINNnEeF2aI3KOS2N/SY5IdcbY3I310Y5cjpioHg6t2NLFiRO5nLO1713kyfVFb2iKCGb35yE8BwBz7783NI1TmFkTw1ut+k53TU6ATuRyrfpOq+u1VfgBoAnhdjC7ZsDJ3PtfrPjty8B5HqxV97qd2e59bhC4AuDMh/B2H1cl8vrEuWMV2VqWC0iu5dpStJTyIdyF2Ve8WTbuLkMa3pzIn50IYiJlkvzM7GjVjoyYe/8KybXB6d6BN/uAITzrRG4JuT9R3W8T/Z9ivmlx9sD7J/v4CZDkd9vQ8ze0NsY8RWAabTWzo2D20WDj4s56aAMTd7mlO2sV2eruOONmqXSTs4rO0hOClnejuyyPobhS3S1Z+8fZHcPdsqdW3etbORVt3R8n2tHzBQAws3urjuLPGu0AnBjw8aphMiK1MaJoFowYMWLEiBEjRowYMWLECshu6Eg6JX/QnoxeAoBgdjOY3Sk54ewoooh8S8htAk8BgAF/CWa3Qwh/L9nYxfasohc4P4+6KGeOI6LkhMCb/WHZRrHXEZXITEV+1/c+mF1rQni1xCFKTivVOwA2e0TO5iE8lyseAYujiA+H9HXxSdP0F2QKOXMcEWvODQ6mB95/cdkue+kZSqW6q+R14LzDvdmvzOxfJJ8QclvJ60JerVVnnzTN13KKWyec1zKAEx/Cz4LZ2wAg5NMq8vPFYVnhwWLkAYD4vTd7ycyyjizlvCiaEJ7N6Pm4iCStDfQdmJF03WJ7H2Ito1Ld7TvwSi4QnGbLiUvqEd36yaooqauUIvbbo3z70IxQkR8D5zXrvlBhZs0D718eIm87Z9OAk8b7N/rywNz734hzL7YlxktDs4LANHY8gWmr65sA3u3Klh62pZwd/HvVfPhYeC46wlLE6lnJnaV47ab0+kvpM6R3iHOVmXIRnrI7Nv8NkF9aQfosmN0EACFnADbTQswjYsGZwsxur0oUb5hciCfG69xdn1IkNwKzsT+9JVdS2/5fzBEP1ax9CG+2DdzvCxMEWInMhkJOMLvflkU3a9UbyypdbeK/gTaX/L8WUB7qmGD2UdPWcZ3ILRU5CWa/jUtDIWdpPbcBepMwAMxD+Emt+n2SOxPVnWD2WjD7Y8v1TLywBuBs7v3zj9m+Ygg5q1V735csTiJys6t077WAktNlNeZFrVn1sGT5Cnxaa84lsqEaecvzmYWmiyZ9IJ+sh64VDe4WhdwQ8un434D3zOyfqy7pgMVxwlMAYj33XjD7aylXUgteLAUXNeZHrH8vqy8vQ0nILLp09zms048YMWLEiM83/gPnEXPaE9Pk3QAAAABJRU5ErkJggg==" alt="MOMOS COFFEE" style="max-width:120px;width:100%;height:auto;display:block;margin:0 auto 8px;">
+        <div style="font-size:10.5px;color:var(--ink-soft);line-height:1.4;">모모스커피(주) 사내용<br>코스트코 발주관리 프로그램</div>
+      </div>
+      <div id="navList"></div>
+      <div class="sidebar-foot">
+        <div class="who"><b id="whoName">-</b><span id="whoRole">-</span></div>
+        <button class="btn btn-ghost btn-block btn-sm" onclick="handleLogout()">로그아웃</button>
+      </div>
+    </div>
+    <div class="main-col">
+      <div class="topbar">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="hamburger" onclick="toggleSidebar(true)">☰</button>
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGIAAAAoCAYAAAAFZi8EAAAGkUlEQVR4nO1aTYhlRxX+vnPq3te9ssUI88T2BxuyimRE0AwuOiG4lRfstQQ6GxeTLNNxbSNIFj2CmzG4nu7grNxmZmG3DIiEuBEcCXbHZCMkA4GJ827VcdG3Xoo779atNz2RoPeDC+9xz/1OnTpV51TVKWDEiBEjRowoRCUyq1UPVGQrJ6ciW7XqQSUyK+EVcqNW3Vtz7nTNOWuf01p1T8iNQo71WvWgVj0g6XKytepeiR0AQNJVqrsT546TttlE9dCJXCbAkvYR4FIe544r1d1SO6MBB5FAyPVlMkKuR5la9WCIs1LdTRu27KlUd4d4hNwo0VuJzKKcE9nOcarI1lDbJs4d9/VFBAF2BtnSZ6g9C6SOmKgedkcDAaYeH3JE2intqFgYJOR66qSh2ZU6os8oJaelhncdq+Q0tbN10mlfX6RwIpfjLO+OfCHXncj2mnOnQzN5gdQRy0ZqG16sxBEkXZTLhYh0VOYa2nVEO2sXRrf6TksdEW2tVfcyOtcjZ86GtqNtonrYJ5OD9L3wZi8BgJLX40hRkS0h9wHAh/DCIDn5DQAwsyMfwt1eXSHcNbOj9Jscgtm1YHYNACrV38eRWom8DmDTgJPIN9C+qwAwD+GXGV33mxB+BABK7vTJGfAeAJDcmTh3XKseOJHt+Cg5zc2ofkeE8GZ0RqV6R8lpJfJW++4Fb3ZryFACXwUAb/brIdkoE78Zwtz7VwCcEbhSqb7qRLYXHev98wZ8kPs+DZFm1uRkg9m77c9Lve0P4W4cnASuCHnVidyKT6X6/sS5f/TNqmy8arx/Q1R/SHKnUn2/bfTRPISbJSuAOEqU/GkD3M7JCvlM+/PeEG/LbQ+8/3at+qGQ+8LzwdaE8J1gdn/o+1SGAA2wPlmST5S0aR7CzcasEuDLJJ9Mvt8S8kUCVyqRt0IIX8/pA/Bp3IwdncbINNnEeF2aI3KOS2N/SY5IdcbY3I310Y5cjpioHg6t2NLFiRO5nLO1713kyfVFb2iKCGb35yE8BwBz7783NI1TmFkTw1ut+k53TU6ATuRyrfpOq+u1VfgBoAnhdjC7ZsDJ3PtfrPjty8B5HqxV97qd2e59bhC4AuDMh/B2H1cl8vrEuWMV2VqWC0iu5dpStJTyIdyF2Ve8WTbuLkMa3pzIn50IYiJlkvzM7GjVjoyYe/8KybXB6d6BN/uAITzrRG4JuT9R3W8T/Z9ivmlx9sD7J/v4CZDkd9vQ8ze0NsY8RWAabTWzo2D20WDj4s56aAMTd7mlO2sV2eruOONmqXSTs4rO0hOClnejuyyPobhS3S1Z+8fZHcPdsqdW3etbORVt3R8n2tHzBQAws3urjuLPGu0AnBjw8aphMiK1MaJoFowYMWLEiBEjRowYMWLECshu6Eg6JX/QnoxeAoBgdjOY3Sk54ewoooh8S8htAk8BgAF/CWa3Qwh/L9nYxfasohc4P4+6KGeOI6LkhMCb/WHZRrHXEZXITEV+1/c+mF1rQni1xCFKTivVOwA2e0TO5iE8lyseAYujiA+H9HXxSdP0F2QKOXMcEWvODQ6mB95/cdkue+kZSqW6q+R14LzDvdmvzOxfJJ8QclvJ60JerVVnnzTN13KKWyec1zKAEx/Cz4LZ2wAg5NMq8vPFYVnhwWLkAYD4vTd7ycyyjizlvCiaEJ7N6Pm4iCStDfQdmJF03WJ7H2Ito1Ld7TvwSi4QnGbLiUvqEd36yaooqauUIvbbo3z70IxQkR8D5zXrvlBhZs0D718eIm87Z9OAk8b7N/rywNz734hzL7YlxktDs4LANHY8gWmr65sA3u3Klh62pZwd/HvVfPhYeC46wlLE6lnJnaV47ab0+kvpM6R3iHOVmXIRnrI7Nv8NkF9aQfosmN0EACFnADbTQswjYsGZwsxur0oUb5hciCfG69xdn1IkNwKzsT+9JVdS2/5fzBEP1ax9CG+2DdzvCxMEWInMhkJOMLvflkU3a9UbyypdbeK/gTaX/L8WUB7qmGD2UdPWcZ3ILRU5CWa/jUtDIWdpPbcBepMwAMxD+Emt+n2SOxPVnWD2WjD7Y8v1TLywBuBs7v3zj9m+Ygg5q1V735csTiJys6t077WAktNlNeZFrVn1sGT5Cnxaa84lsqEaecvzmYWmiyZ9IJ+sh64VDe4WhdwQ8un434D3zOyfqy7pgMVxwlMAYj33XjD7aylXUgteLAUXNeZHrH8vqy8vQ0nILLp09zms048YMWLEiM83/gPnEXPaE9Pk3QAAAABJRU5ErkJggg==" alt="MOMOS COFFEE" style="height:22px;width:auto;display:block;">
+          <h2 class="page-title" id="pageTitle">대시보드</h2>
+        </div>
+        <div style="font-size:12.5px;color:var(--ink-soft)" id="topbarClock"></div>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 모달 루트 ===================== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box" id="modalBox">
+    <div class="modal-head">
+      <h3 id="modalTitle">제목</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<div id="toastRoot"></div>
+
+<script>
+/* ============================================================
+   설정 - Supabase 연결 정보
+   ============================================================ */
+const SUPABASE_URL = 'https://flevmhcogrwagyoxcacs.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsZXZtaGNvZ3J3YWd5b3hjYWNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNDk5ODAsImV4cCI6MjA4NzkyNTk4MH0.eWvh1kjdnG-juv77MMbnmnRSWa22eFP0sZn9r4wHsYg';
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ============================================================
+   전역 상태
+   ============================================================ */
+const STATE = {
+  session: null,
+  profile: null,          // { id, email, name, role }
+  productTypes: [],
+  products: [],
+  countries: [],
+  destinations: [],
+  currentTab: 'dashboard',
+  cache: {
+    orders: [], productionPlans: [], pallets: [], warehouse: [], dispatches: [], profiles: []
+  }
+};
+
+const ROLE_LABEL = { admin:'관리자', production_manager:'생산담당자', shipping_manager:'출고담당자', viewer:'조회전용' };
+const TABS = [
+  { key:'dashboard', label:'대시보드', ic:'📊' },
+  { key:'calendar',  label:'캘린더', ic:'📅' },
+  { key:'orders',    label:'발주관리', ic:'📋' },
+  { key:'production', label:'생산계획', ic:'🏭' },
+  { key:'inventory', label:'재고관리', ic:'📦' },
+  { key:'dispatch',  label:'출고관리', ic:'🚚' },
+  { key:'warehouse', label:'입고예약관리', ic:'🏬' },
+  { key:'tracking',  label:'추적관리', ic:'🔍' },
+  { key:'analytics', label:'분석', ic:'📈' },
+  { key:'master',    label:'기준정보', ic:'⚙️' },
+  { key:'history',   label:'이력조회', ic:'🗂️' },
+  { key:'settings',  label:'설정', ic:'🔧' },
+];
+
+/* ============================================================
+   유틸 함수
+   ============================================================ */
+function todayKST(){
+  const d = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Seoul'}));
+  return fmtDateISO(d);
+}
+function fmtDateISO(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function addDaysISO(iso, days){
+  if(!iso) return iso;
+  const d = new Date(iso+'T00:00:00');
+  d.setDate(d.getDate()+days);
+  return fmtDateISO(d);
+}
+function letterSuffix(n){
+  // 0=A, 1=B, ..., 25=Z, 26=AA, 27=AB, ..., 51=AZ, 52=BA, ...
+  let s = '';
+  n = n + 1;
+  while(n > 0){
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+function diffDaysISO(a,b){ // a-b in days
+  if(!a||!b) return null;
+  return Math.round((new Date(a+'T00:00:00') - new Date(b+'T00:00:00'))/86400000);
+}
+async function nextPalletNumbers(dateISO, count){
+  const prefix = 'P' + (dateISO||todayKST()).replace(/-/g,'');
+  const { data, error } = await sb.from('costco_pallets').select('pallet_no').ilike('pallet_no', prefix + '%');
+  if(error) throw error;
+  const startIdx = (data||[]).length;
+  const results = [];
+  for(let i=0;i<count;i++){ results.push(prefix + letterSuffix(startIdx + i)); }
+  return results;
+}
+async function computePalletPreviewMap(allBatches){
+  const map = {};
+  const byDate = {};
+  allBatches.forEach(b=>{
+    if(!b.planned_production_date || b.status==='취소' || b.status==='생산완료') return;
+    (byDate[b.planned_production_date] = byDate[b.planned_production_date]||[]).push(b);
+  });
+  for(const date of Object.keys(byDate)){
+    const list = byDate[date].sort((a,b)=> (a.created_at||'') < (b.created_at||'') ? -1 : 1);
+    const prefix = 'P' + date.replace(/-/g,'');
+    const { data } = await sb.from('costco_pallets').select('pallet_no').ilike('pallet_no', prefix + '%');
+    let offset = (data||[]).length;
+    for(const b of list){
+      const n = b.planned_pallet_count || 1;
+      map[b.id] = Array.from({length:n}, (_,i)=> prefix + letterSuffix(offset + i));
+      offset += n;
+    }
+  }
+  return map;
+}
+async function palletNumbersForBatch(batch){
+  if(!batch.planned_production_date) return await nextPalletNumbers(null, batch.planned_pallet_count||1);
+  const { data: sameDate, error } = await sb.from('costco_production_plans')
+    .select('id, planned_production_date, planned_pallet_count, status, created_at')
+    .eq('planned_production_date', batch.planned_production_date).neq('status','취소');
+  if(error) throw error;
+  const map = await computePalletPreviewMap(sameDate);
+  return map[batch.id] || await nextPalletNumbers(batch.planned_production_date, batch.planned_pallet_count||1);
+}
+function computeExpirationFromSerial(serial){
+  if(!serial) return null;
+  const digits = String(serial).replace(/[^0-9]/g,'');
+  if(digits.length < 8) return null;
+  const y = digits.slice(0,4), m = digits.slice(4,6), d = digits.slice(6,8);
+  if(m<'01'||m>'12'||d<'01'||d>'31') return null;
+  const dt = new Date(`${y}-${m}-${d}T00:00:00`);
+  if(isNaN(dt.getTime())) return null;
+  dt.setFullYear(dt.getFullYear()+1);
+  dt.setDate(dt.getDate()-1);
+  return fmtDateISO(dt);
+}
+function palletExpirationGroups(pallet){
+  const lots = (pallet.costco_pallet_lots||[]).filter(l=>l.serial_no && !l._deleted);
+  const groups = {};
+  lots.forEach(l=>{
+    const exp = computeExpirationFromSerial(l.serial_no);
+    if(!exp) return;
+    groups[exp] = (groups[exp]||0) + (parseInt(l.quantity)||0);
+  });
+  return groups;
+}
+function palletExpirationDisplay(pallet){
+  const groups = palletExpirationGroups(pallet);
+  const keys = Object.keys(groups).sort();
+  if(!keys.length) return fmtDateDisp(pallet.expiration_date);
+  if(keys.length===1) return fmtDateDisp(keys[0]);
+  return keys.map(k=>`${fmtDateDisp(k)}(${groups[k]}개)`).join(', ');
+}
+function fmtDateDisp(iso){
+  if(!iso) return '-';
+  const [y,m,d]=iso.split('-');
+  return `${y}.${m}.${d}`;
+}
+function nowKSTString(){
+  return new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul', hour12:false});
+}
+function esc(str){
+  if(str===null||str===undefined) return '';
+  return String(str).replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+function toast(msg, type){
+  const root = document.getElementById('toastRoot');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type==='ok'?' ok':type==='err'?' err':'');
+  el.textContent = msg;
+  root.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .25s'; setTimeout(()=>el.remove(),260); }, 2600);
+}
+function friendlyError(err){
+  const m = (err && (err.message||err.error_description||err.toString())) || '알 수 없는 오류가 발생했습니다.';
+  if(m.includes('duplicate key')) return '이미 등록된 값입니다. 다시 확인해 주세요.';
+  if(m.includes('violates row-level security') || m.includes('permission denied')) return '이 작업을 수행할 권한이 없습니다.';
+  if(m.includes('violates foreign key constraint')) return '이 항목은 다른 데이터에서 이미 사용 중이라 삭제할 수 없습니다.';
+  if(m.includes('출고 완료') || m.includes('출고완료') || m.includes('일 수 없') || m.includes('이전일')) return m;
+  return '오류가 발생했습니다: ' + m;
+}
+function csvDownload(filename, rows){
+  if(!rows || !rows.length){ toast('내보낼 데이터가 없습니다.','err'); return; }
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.join(',')].concat(
+    rows.map(r=>headers.map(h=>{
+      let v = r[h]; if(v===null||v===undefined) v='';
+      v = String(v).replace(/"/g,'""');
+      return /[",\n]/.test(v) ? `"${v}"` : v;
+    }).join(','))
+  );
+  const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- 공용 기간선택(월별/년별/특정기간) ---------- */
+function lastDayOfMonthISO(ym){
+  const [y,m] = ym.split('-').map(Number);
+  const d = new Date(y, m, 0);
+  return fmtDateISO(d);
+}
+function setPeriodRange(filters, mode){
+  const t = todayKST();
+  if(mode==='month'){
+    const ym = t.slice(0,7);
+    filters.from = ym+'-01';
+    filters.to = lastDayOfMonthISO(ym);
+  }else if(mode==='year'){
+    const y = t.slice(0,4);
+    filters.from = y+'-01-01';
+    filters.to = y+'-12-31';
+  }
+}
+function shiftPeriod(filters, unit, dir){
+  if(unit==='month'){
+    const [y,m] = (filters.from||todayKST()).split('-').map(Number);
+    let ny=y, nm=m+dir;
+    if(nm<1){nm=12;ny--;} if(nm>12){nm=1;ny++;}
+    const ym = `${ny}-${String(nm).padStart(2,'0')}`;
+    filters.from = ym+'-01';
+    filters.to = lastDayOfMonthISO(ym);
+  }else if(unit==='year'){
+    const y = parseInt((filters.from||todayKST()).slice(0,4)) + dir;
+    filters.from = y+'-01-01';
+    filters.to = y+'-12-31';
+  }
+}
+function periodPickerHtml(filters, tabKey, varName){
+  const mode = filters.periodMode || 'month';
+  const label = mode==='month' ? (filters.from||todayKST()).slice(0,7).replace('-','.')+'월'
+    : mode==='year' ? (filters.from||todayKST()).slice(0,4)+'년' : '';
+  return `
+    <select onchange="${varName}.periodMode=this.value; setPeriodRange(${varName},this.value); switchTab('${tabKey}')">
+      <option value="month" ${mode==='month'?'selected':''}>월별</option>
+      <option value="year" ${mode==='year'?'selected':''}>년별</option>
+      <option value="custom" ${mode==='custom'?'selected':''}>특정기간</option>
+    </select>
+    ${mode==='month'?`
+      <button class="btn btn-ghost btn-sm" onclick="shiftPeriod(${varName},'month',-1); switchTab('${tabKey}')">‹</button>
+      <b style="font-size:13px;white-space:nowrap;">${label}</b>
+      <button class="btn btn-ghost btn-sm" onclick="shiftPeriod(${varName},'month',1); switchTab('${tabKey}')">›</button>
+    `:mode==='year'?`
+      <button class="btn btn-ghost btn-sm" onclick="shiftPeriod(${varName},'year',-1); switchTab('${tabKey}')">‹</button>
+      <b style="font-size:13px;white-space:nowrap;">${label}</b>
+      <button class="btn btn-ghost btn-sm" onclick="shiftPeriod(${varName},'year',1); switchTab('${tabKey}')">›</button>
+    `:`
+      <input type="date" value="${filters.from||''}" onchange="${varName}.from=this.value; switchTab('${tabKey}')">
+      <span style="color:var(--ink-soft)">~</span>
+      <input type="date" value="${filters.to||''}" onchange="${varName}.to=this.value; switchTab('${tabKey}')">
+    `}
+  `;
+}
+
+function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+/* 확인창 */
+function confirmModal(message, onConfirm, opts){
+  opts = opts || {};
+  openModal(opts.title || '확인', `<p style="line-height:1.6;white-space:pre-line;">${esc(message)}</p>`, [
+    { label:'취소', cls:'btn-ghost', onClick: closeModal },
+    { label: opts.confirmLabel || '확인', cls: opts.danger?'btn-danger':'btn-primary', onClick: async ()=>{ await onConfirm(); } }
+  ]);
+}
+
+/* 모달 공통 */
+function openModal(title, bodyHtml, buttons, wide, locked){
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  const foot = document.getElementById('modalFoot');
+  foot.innerHTML = '';
+  (buttons||[]).forEach(b=>{
+    const btn = document.createElement('button');
+    btn.className = 'btn ' + (b.cls||'btn-ghost');
+    btn.textContent = b.label;
+    btn.onclick = b.onClick;
+    btn.id = b.id || '';
+    foot.appendChild(btn);
+  });
+  document.getElementById('modalBox').classList.toggle('wide', !!wide);
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('modalOverlay').dataset.locked = locked ? '1' : '';
+  document.querySelector('.modal-close').style.display = locked ? 'none' : '';
+}
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('modalOverlay').dataset.locked = '';
+}
+document.getElementById('modalOverlay').addEventListener('click', e=>{
+  if(e.target.id==='modalOverlay' && e.currentTarget.dataset.locked!=='1') closeModal();
+});
+
+function toggleSidebar(open){
+  document.getElementById('sidebar').classList.toggle('open', open);
+  document.getElementById('mobileOverlay').classList.toggle('open', open);
+}
+
+/* 권한 헬퍼 */
+function myRole(){ return STATE.profile ? STATE.profile.role : 'viewer'; }
+function can(...roles){ return roles.includes(myRole()); }
+</script>
+<script>
+/* ============================================================
+   인증 (로그인/로그아웃/세션)
+   ============================================================ */
+async function handleLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errBox = document.getElementById('loginError');
+  errBox.style.display='none';
+  if(!email || !password){
+    errBox.textContent = '이메일과 비밀번호를 입력해 주세요.';
+    errBox.style.display='block';
+    return;
+  }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = '로그인 중...';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = '로그인';
+  if(error){
+    errBox.textContent = '로그인에 실패했습니다. 이메일과 비밀번호를 확인해 주세요.';
+    errBox.style.display='block';
+    return;
+  }
+  await afterLogin(data.session);
+}
+async function handleLogout(){
+  await sb.auth.signOut();
+  STATE.session=null; STATE.profile=null;
+  document.getElementById('appShell').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('loginEmail').value=''; document.getElementById('loginPassword').value='';
+}
+async function afterLogin(session){
+  STATE.session = session;
+  let { data: profile, error } = await sb.from('costco_profiles').select('*').eq('id', session.user.id).maybeSingle();
+  if(error || !profile){
+    toast('프로필 정보를 불러오지 못했습니다. 관리자에게 문의해 주세요.', 'err');
+    return;
+  }
+  if(!profile.is_active){
+    toast('비활성화된 계정입니다. 관리자에게 문의해 주세요.', 'err');
+    await sb.auth.signOut();
+    return;
+  }
+  STATE.profile = profile;
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appShell').style.display='block';
+  document.getElementById('whoName').textContent = profile.name || profile.email;
+  document.getElementById('whoRole').textContent = ROLE_LABEL[profile.role] || profile.role;
+  await loadLookups();
+  renderNav();
+  switchTab('dashboard');
+  startClock();
+}
+async function checkSession(){
+  const { data } = await sb.auth.getSession();
+  if(data && data.session){
+    await afterLogin(data.session);
+  }
+}
+function startClock(){
+  const el = document.getElementById('topbarClock');
+  const tick = ()=>{ el.textContent = nowKSTString() + ' (KST)'; };
+  tick(); setInterval(tick, 30000);
+}
+
+/* ============================================================
+   기준정보 로드 (제품유형/파렛트유형/국가/출고처)
+   ============================================================ */
+async function loadLookups(){
+  const [{data:pt}, {data:pr}, {data:ct}, {data:dt}] = await Promise.all([
+    sb.from('costco_product_types').select('*').order('type_name'),
+    sb.from('costco_products').select('*').order('product_name'),
+    sb.from('costco_countries').select('*').order('country_name'),
+    sb.from('costco_destinations').select('*').order('destination_name'),
+  ]);
+  STATE.productTypes = pt||[];
+  STATE.products = pr||[];
+  STATE.countries = ct||[];
+  STATE.destinations = dt||[];
+}
+function productName(id){ const p = STATE.products.find(x=>x.id===id); return p? p.product_name : '-'; }
+function countryName(id){ const c = STATE.countries.find(x=>x.id===id); return c? c.country_name : '-'; }
+function destinationName(id){ const d = STATE.destinations.find(x=>x.id===id); return d? d.destination_name : '-'; }
+function activeDestinations(countryId){
+  return STATE.destinations.filter(d=>d.is_active && (!countryId || d.country_id===countryId));
+}
+function activeProducts(){ return STATE.products.filter(p=>p.is_active); }
+function activeCountries(){ return STATE.countries.filter(c=>c.is_active); }
+
+/* ============================================================
+   네비게이션 / 탭 전환
+   ============================================================ */
+function renderNav(){
+  const nav = document.getElementById('navList');
+  nav.innerHTML = TABS.map(t=>`
+    <div class="nav-item ${t.key===STATE.currentTab?'active':''}" onclick="switchTab('${t.key}')">
+      <span class="ic">${t.ic}</span><span>${t.label}</span>
+    </div>`).join('');
+}
+async function switchTab(key){
+  STATE.currentTab = key;
+  document.getElementById('pageTitle').textContent = TABS.find(t=>t.key===key).label;
+  renderNav();
+  toggleSidebar(false);
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="empty-state">불러오는 중...</div>';
+  try{
+    if(key==='dashboard') await renderDashboard();
+    else if(key==='calendar') await renderCalendarTab();
+    else if(key==='orders') await renderOrders();
+    else if(key==='production') await renderProduction();
+    else if(key==='inventory') await renderInventory();
+    else if(key==='dispatch') await renderDispatch();
+    else if(key==='warehouse') await renderWarehouse();
+    else if(key==='tracking') await renderTracking();
+    else if(key==='analytics') await renderAnalytics();
+    else if(key==='master') await renderMaster();
+    else if(key==='history') await renderHistory();
+    else if(key==='settings') await renderSettings();
+  }catch(e){
+    console.error(e);
+    content.innerHTML = `<div class="empty-state"><div class="ic">⚠️</div>${esc(friendlyError(e))}</div>`;
+  }
+}
+
+/* ============================================================
+   초기화
+   ============================================================ */
+sb.auth.onAuthStateChange((event, session)=>{
+  if(event==='SIGNED_OUT'){
+    STATE.session=null; STATE.profile=null;
+  }
+});
+checkSession();
+</script>
+<script>
+/* ============================================================
+   기준정보 탭
+   ============================================================ */
+let MASTER_VIEW = 'products';
+async function renderMaster(){
+  const isAdmin = can('admin');
+  await loadLookups();
+  const tabsHtml = `
+    <div class="toolbar" style="margin-bottom:14px;">
+      ${[['products','파렛트유형'],['types','제품유형'],['countries','국가'],['destinations','출고처'],['users','사용자']].map(([k,l])=>`
+        <button class="btn ${MASTER_VIEW===k?'btn-primary':'btn-ghost'} btn-sm" onclick="MASTER_VIEW='${k}'; switchTab('master')">${l}</button>
+      `).join('')}
+    </div>`;
+  let body = '';
+  if(MASTER_VIEW==='products') body = await renderMasterProducts(isAdmin);
+  else if(MASTER_VIEW==='types') body = await renderMasterTypes(isAdmin);
+  else if(MASTER_VIEW==='countries') body = await renderMasterCountries(isAdmin);
+  else if(MASTER_VIEW==='destinations') body = await renderMasterDestinations(isAdmin);
+  else if(MASTER_VIEW==='users') body = await renderMasterUsers(isAdmin);
+  document.getElementById('content').innerHTML = tabsHtml + body;
+}
+
+/* ---------- 기준정보 공통 삭제 ---------- */
+function deleteMasterRow(table, id, label){
+  confirmModal(`이 ${label} 항목을 완전히 삭제하시겠습니까?\n다른 데이터에서 사용 중이면 삭제할 수 없습니다.`, async ()=>{
+    try{
+      const { error } = await sb.from(table).delete().eq('id', id);
+      if(error) throw error;
+      closeModal(); toast(`${label}이(가) 삭제되었습니다.`,'ok'); switchTab('master');
+    }catch(e){
+      const msg = friendlyError(e);
+      toast(msg.includes('사용 중이라 삭제할 수 없습니다') ? msg + ' 대신 "사용중지"로 변경해 주세요.' : msg, 'err');
+    }
+  }, { danger:true, confirmLabel:'삭제' });
+}
+
+/* ---------- 파렛트유형 ---------- */
+async function renderMasterProducts(isAdmin){
+  return `
+    <div class="panel">
+      <div class="panel-head"><h3>파렛트유형 목록</h3>${isAdmin?`<button class="btn btn-primary btn-sm" onclick="openProductModal(null)">+ 파렛트유형 등록</button>`:''}</div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>코드</th><th>파렛트유형명</th><th>제품유형</th><th>기본 파렛트 수량</th><th>사용여부</th><th>비고</th><th></th></tr></thead>
+        <tbody>
+        ${STATE.products.length? STATE.products.map(p=>{
+          const t = STATE.productTypes.find(x=>x.id===p.product_type_id);
+          return `<tr>
+            <td>${esc(p.product_code)}</td><td>${esc(p.product_name)}</td><td>${esc(t?t.type_name:'-')}</td>
+            <td>${p.default_pallet_quantity ?? '-'}</td>
+            <td>${p.is_active?'<span class="badge b-green">사용</span>':'<span class="badge b-gray">중지</span>'}</td>
+            <td>${esc(p.notes||'-')}</td>
+            <td>${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openProductModal('${p.id}')">수정</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteMasterRow('costco_products','${p.id}','파렛트유형')">삭제</button>`:''}</td>
+          </tr>`;
+        }).join('') : `<tr><td colspan="7" class="empty-row">등록된 파렛트유형이 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>`;
+}
+async function openProductModal(id){
+  const p = id ? STATE.products.find(x=>x.id===id) : null;
+  const body = `
+    <div class="form-grid">
+      <div class="field"><label>파렛트유형 코드 *</label><input type="text" id="pmCode" value="${esc(p?.product_code||'')}"></div>
+      <div class="field"><label>파렛트유형명 *</label><input type="text" id="pmName" value="${esc(p?.product_name||'')}"></div>
+      <div class="field"><label>제품 유형 *</label>
+        <select id="pmType">${STATE.productTypes.map(t=>`<option value="${t.id}" ${p&&p.product_type_id===t.id?'selected':''}>${esc(t.type_name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>기본 파렛트 수량</label><input type="number" min="0" id="pmDefQty" value="${p?.default_pallet_quantity ?? ''}" placeholder="예: 280"></div>
+      <div class="field"><label>사용 여부</label>
+        <select id="pmActive"><option value="true" ${!p||p.is_active?'selected':''}>사용</option><option value="false" ${p&&!p.is_active?'selected':''}>중지</option></select>
+      </div>
+      <div class="field full"><label>비고</label><input type="text" id="pmNotes" value="${esc(p?.notes||'')}"></div>
+    </div>`;
+  openModal(id?'파렛트유형 수정':'파렛트유형 등록', body, [
+    { label:'취소', cls:'btn-ghost', onClick: closeModal },
+    { label:'저장', cls:'btn-primary', onClick: ()=>saveProduct(id) }
+  ]);
+}
+async function saveProduct(id){
+  const code = document.getElementById('pmCode').value.trim();
+  const name = document.getElementById('pmName').value.trim();
+  const typeId = document.getElementById('pmType').value;
+  if(!code || !name || !typeId){ toast('파렛트유형 코드, 파렛트유형명, 제품유형은 필수입니다.','err'); return; }
+  const payload = {
+    product_code: code, product_name: name, product_type_id: typeId,
+    default_pallet_quantity: document.getElementById('pmDefQty').value ? parseInt(document.getElementById('pmDefQty').value) : null,
+    is_active: document.getElementById('pmActive').value==='true',
+    notes: document.getElementById('pmNotes').value.trim() || null,
+  };
+  try{
+    const { error } = id
+      ? await sb.from('costco_products').update(payload).eq('id', id)
+      : await sb.from('costco_products').insert(payload);
+    if(error) throw error;
+    closeModal(); toast('파렛트유형 정보가 저장되었습니다.','ok'); switchTab('master');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+
+/* ---------- 제품 유형 ---------- */
+async function renderMasterTypes(isAdmin){
+  return `
+    <div class="panel">
+      <div class="panel-head"><h3>제품 유형</h3>${isAdmin?`<button class="btn btn-primary btn-sm" onclick="openTypeModal(null)">+ 유형 등록</button>`:''}</div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>코드</th><th>유형명</th><th>사용여부</th><th></th></tr></thead>
+        <tbody>
+        ${STATE.productTypes.length? STATE.productTypes.map(t=>`
+          <tr><td>${esc(t.type_code)}</td><td>${esc(t.type_name)}</td>
+          <td>${t.is_active?'<span class="badge b-green">사용</span>':'<span class="badge b-gray">중지</span>'}</td>
+          <td>${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openTypeModal('${t.id}')">수정</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteMasterRow('costco_product_types','${t.id}','제품 유형')">삭제</button>`:''}</td></tr>`
+        ).join('') : `<tr><td colspan="4" class="empty-row">등록된 유형이 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>`;
+}
+async function openTypeModal(id){
+  const t = id ? STATE.productTypes.find(x=>x.id===id) : null;
+  const body = `
+    <div class="form-grid">
+      <div class="field"><label>코드 *</label><input type="text" id="tmCode" value="${esc(t?.type_code||'')}"></div>
+      <div class="field"><label>유형명 *</label><input type="text" id="tmName" value="${esc(t?.type_name||'')}"></div>
+      <div class="field"><label>사용 여부</label>
+        <select id="tmActive"><option value="true" ${!t||t.is_active?'selected':''}>사용</option><option value="false" ${t&&!t.is_active?'selected':''}>중지</option></select>
+      </div>
+    </div>`;
+  openModal(id?'유형 수정':'유형 등록', body, [
+    { label:'취소', cls:'btn-ghost', onClick: closeModal },
+    { label:'저장', cls:'btn-primary', onClick: ()=>saveType(id) }
+  ]);
+}
+async function saveType(id){
+  const code = document.getElementById('tmCode').value.trim(), name = document.getElementById('tmName').value.trim();
+  if(!code||!name){ toast('코드와 유형명은 필수입니다.','err'); return; }
+  const payload = { type_code:code, type_name:name, is_active: document.getElementById('tmActive').value==='true' };
+  try{
+    const { error } = id ? await sb.from('costco_product_types').update(payload).eq('id', id) : await sb.from('costco_product_types').insert(payload);
+    if(error) throw error;
+    closeModal(); toast('제품 유형이 저장되었습니다.','ok'); switchTab('master');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+
+/* ---------- 국가 ---------- */
+async function renderMasterCountries(isAdmin){
+  return `
+    <div class="panel">
+      <div class="panel-head"><h3>국가 / 출고구분</h3>${isAdmin?`<button class="btn btn-primary btn-sm" onclick="openCountryModal(null)">+ 국가 등록</button>`:''}</div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>코드</th><th>국가명</th><th>사용여부</th><th>비고</th><th></th></tr></thead>
+        <tbody>
+        ${STATE.countries.length? STATE.countries.map(c=>`
+          <tr><td>${esc(c.country_code)}</td><td>${esc(c.country_name)}</td>
+          <td>${c.is_active?'<span class="badge b-green">사용</span>':'<span class="badge b-gray">중지</span>'}</td>
+          <td>${esc(c.notes||'-')}</td>
+          <td>${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openCountryModal('${c.id}')">수정</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteMasterRow('costco_countries','${c.id}','국가')">삭제</button>`:''}</td></tr>`
+        ).join('') : `<tr><td colspan="5" class="empty-row">등록된 국가가 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>`;
+}
+async function openCountryModal(id){
+  const c = id ? STATE.countries.find(x=>x.id===id) : null;
+  const body = `
+    <div class="form-grid">
+      <div class="field"><label>국가 코드 *</label><input type="text" id="cmCode" value="${esc(c?.country_code||'')}"></div>
+      <div class="field"><label>국가명/출고구분명 *</label><input type="text" id="cmName" value="${esc(c?.country_name||'')}"></div>
+      <div class="field"><label>사용 여부</label>
+        <select id="cmActive"><option value="true" ${!c||c.is_active?'selected':''}>사용</option><option value="false" ${c&&!c.is_active?'selected':''}>중지</option></select>
+      </div>
+      <div class="field full"><label>비고</label><input type="text" id="cmNotes" value="${esc(c?.notes||'')}"></div>
+    </div>`;
+  openModal(id?'국가 수정':'국가 등록', body, [
+    { label:'취소', cls:'btn-ghost', onClick: closeModal },
+    { label:'저장', cls:'btn-primary', onClick: ()=>saveCountry(id) }
+  ]);
+}
+async function saveCountry(id){
+  const code = document.getElementById('cmCode').value.trim(), name = document.getElementById('cmName').value.trim();
+  if(!code||!name){ toast('국가 코드와 국가명은 필수입니다.','err'); return; }
+  const payload = { country_code:code, country_name:name, is_active: document.getElementById('cmActive').value==='true', notes: document.getElementById('cmNotes').value.trim()||null };
+  try{
+    const { error } = id ? await sb.from('costco_countries').update(payload).eq('id', id) : await sb.from('costco_countries').insert(payload);
+    if(error) throw error;
+    closeModal(); toast('국가 정보가 저장되었습니다.','ok'); switchTab('master');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+
+/* ---------- 출고처 ---------- */
+async function renderMasterDestinations(isAdmin){
+  return `
+    <div class="panel">
+      <div class="panel-head"><h3>출고처(납품처)</h3>${isAdmin?`<button class="btn btn-primary btn-sm" onclick="openDestinationModal(null)">+ 출고처 등록</button>`:''}</div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>코드</th><th>출고처명</th><th>국가</th><th>사용여부</th><th>비고</th><th></th></tr></thead>
+        <tbody>
+        ${STATE.destinations.length? STATE.destinations.map(d=>`
+          <tr><td>${esc(d.destination_code)}</td><td>${esc(d.destination_name)}</td>
+          <td>${esc(countryName(d.country_id))}</td>
+          <td>${d.is_active?'<span class="badge b-green">사용</span>':'<span class="badge b-gray">중지</span>'}</td>
+          <td>${esc(d.notes||'-')}</td>
+          <td>${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openDestinationModal('${d.id}')">수정</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteMasterRow('costco_destinations','${d.id}','출고처')">삭제</button>`:''}</td></tr>`
+        ).join('') : `<tr><td colspan="6" class="empty-row">등록된 출고처가 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>`;
+}
+async function openDestinationModal(id){
+  const d = id ? STATE.destinations.find(x=>x.id===id) : null;
+  const body = `
+    <div class="form-grid">
+      <div class="field"><label>출고처 코드 *</label><input type="text" id="dmCode" value="${esc(d?.destination_code||'')}"></div>
+      <div class="field"><label>출고처명 *</label><input type="text" id="dmName" value="${esc(d?.destination_name||'')}"></div>
+      <div class="field"><label>국가</label>
+        <select id="dmCountry"><option value="">선택 안함</option>${STATE.countries.map(c=>`<option value="${c.id}" ${d&&d.country_id===c.id?'selected':''}>${esc(c.country_name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>사용 여부</label>
+        <select id="dmActive"><option value="true" ${!d||d.is_active?'selected':''}>사용</option><option value="false" ${d&&!d.is_active?'selected':''}>중지</option></select>
+      </div>
+      <div class="field full"><label>비고</label><input type="text" id="dmNotes" value="${esc(d?.notes||'')}"></div>
+    </div>`;
+  openModal(id?'출고처 수정':'출고처 등록', body, [
+    { label:'취소', cls:'btn-ghost', onClick: closeModal },
+    { label:'저장', cls:'btn-primary', onClick: ()=>saveDestination(id) }
+  ]);
+}
+async function saveDestination(id){
+  const code = document.getElementById('dmCode').value.trim(), name = document.getElementById('dmName').value.trim();
+  if(!code||!name){ toast('출고처 코드와 출고처명은 필수입니다.','err'); return; }
+  const payload = {
+    destination_code:code, destination_name:name,
+    country_id: document.getElementById('dmCountry').value || null,
+    is_active: document.getElementById('dmActive').value==='true',
+    notes: document.getElementById('dmNotes').value.trim()||null
+  };
+  try{
+    const { error } = id ? await sb.from('costco_destinations').update(payload).eq('id', id) : await sb.from('costco_destinations').insert(payload);
+    if(error) throw error;
+    closeModal(); toast('출고처 정보가 저장되었습니다.','ok'); switchTab('master');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+
+/* ---------- 사용자 ---------- */
+async function renderMasterUsers(isAdmin){
+  if(!isAdmin){
+    return `<div class="empty-state"><div class="ic">🔒</div>사용자 관리는 관리자만 접근할 수 있습니다.</div>`;
+  }
+  const { data: users, error } = await sb.from('costco_profiles').select('*').order('created_at');
+  if(error) return `<div class="empty-state">${esc(friendlyError(error))}</div>`;
+  return `
+    <div class="panel">
+      <div class="panel-head"><h3>사용자 권한 관리</h3></div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>성함(아이디 매칭)</th><th>이메일</th><th>권한</th><th>사용여부</th><th></th></tr></thead>
+        <tbody>
+        ${(users||[]).map(u=>`
+          <tr>
+            <td>
+              <div style="display:flex;gap:4px;align-items:center;">
+                <input type="text" id="userName_${u.id}" value="${esc(u.name||'')}" placeholder="성함 입력" style="width:100px;">
+                <button class="btn btn-ghost btn-sm" onclick="updateUserName('${u.id}')">저장</button>
+              </div>
+            </td>
+            <td>${esc(u.email)}</td>
+            <td>
+              <select onchange="updateUserRole('${u.id}', this.value)">
+                ${Object.entries(ROLE_LABEL).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v}</option>`).join('')}
+              </select>
+            </td>
+            <td>${u.is_active?'<span class="badge b-green">사용</span>':'<span class="badge b-gray">중지</span>'}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick="toggleUserActive('${u.id}', ${!u.is_active})">${u.is_active?'사용중지':'사용전환'}</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div></div>
+    </div>`;
+}
+async function updateUserName(id){
+  try{
+    const nameInput = document.getElementById('userName_'+id);
+    const name = (nameInput?.value || '').trim();
+    if(!name){ toast('성함을 입력해 주세요.','err'); return; }
+    const { error } = await sb.from('costco_profiles').update({name}).eq('id', id);
+    if(error) throw error;
+    if(STATE.cache.profileNames) STATE.cache.profileNames[id] = name;
+    toast('성함이 저장되었습니다. 이후 발주확인/이력조회 등에 성함으로 표시됩니다.','ok');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+async function updateUserRole(id, role){
+  try{
+    const { error } = await sb.from('costco_profiles').update({role}).eq('id', id);
+    if(error) throw error;
+    toast('권한이 변경되었습니다.','ok');
+  }catch(e){ toast(friendlyError(e),'err'); switchTab('master'); }
+}
+async function toggleUserActive(id, active){
+  try{
+    const { error } = await sb.from('costco_profiles').update({is_active:active}).eq('id', id);
+    if(error) throw error;
+    toast(active?'사용자가 활성화되었습니다.':'사용자가 비활성화되었습니다.','ok');
+    switchTab('master');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+
+/* ---------- 설정 ---------- */
+async function renderSettings(){
+  const html = `
+    <div class="panel">
+      <div class="panel-head"><h3>내 계정 정보</h3></div>
+      <div class="panel-body">
+        <div class="field"><label>이메일</label><input type="text" value="${esc(STATE.profile?.email||'')}" disabled></div>
+        <div class="field"><label>성함</label><input type="text" value="${esc(STATE.profile?.name||'-')}" disabled></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>비밀번호 변경</h3></div>
+      <div class="panel-body" style="max-width:360px;">
+        <div class="field">
+          <label>새 비밀번호</label>
+          <input type="password" id="newPassword1" placeholder="6자 이상 입력">
+        </div>
+        <div class="field">
+          <label>새 비밀번호 확인</label>
+          <input type="password" id="newPassword2" placeholder="다시 입력">
+        </div>
+        <button class="btn btn-primary" id="changePwBtn" onclick="handleChangePassword()">비밀번호 변경</button>
+      </div>
+    </div>`;
+  document.getElementById('content').innerHTML = html;
+}
+async function handleChangePassword(){
+  const p1 = document.getElementById('newPassword1').value;
+  const p2 = document.getElementById('newPassword2').value;
+  if(!p1 || p1.length<6){ toast('비밀번호는 6자 이상이어야 합니다.','err'); return; }
+  if(p1!==p2){ toast('비밀번호가 일치하지 않습니다.','err'); return; }
+  const btn = document.getElementById('changePwBtn');
+  btn.disabled = true;
+  try{
+    const { error } = await sb.auth.updateUser({ password:p1 });
+    if(error) throw error;
+    toast('비밀번호가 변경되었습니다.','ok');
+    document.getElementById('newPassword1').value='';
+    document.getElementById('newPassword2').value='';
+  }catch(e){ toast(friendlyError(e),'err'); }
+  finally{ btn.disabled = false; }
+}
+</script>
+<script>
+/* ============================================================
+   공통 데이터 로더 (신규 스키마)
+   ============================================================ */
+async function loadOrdersFull(dateFrom, dateTo){
+  let q = sb.from('costco_orders').select('*').is('deleted_at', null).order('planned_ship_date', {ascending:true});
+  if(dateFrom) q = q.gte('planned_ship_date', dateFrom);
+  if(dateTo) q = q.lte('planned_ship_date', dateTo);
+  const { data, error } = await q;
+  if(error) throw error;
+  return data || [];
+}
+async function loadProfileNameMap(){
+  if(STATE.cache.profileNames) return STATE.cache.profileNames;
+  const { data, error } = await sb.from('costco_profiles').select('id, name, email');
+  if(error) return {};
+  const map = {};
+  (data||[]).forEach(p=>{ map[p.id] = p.name || p.email || ''; });
+  STATE.cache.profileNames = map;
+  return map;
+}
+async function loadProductionPlans(dateFrom, dateTo){
+  let q = sb.from('costco_production_plans').select('*').order('planned_production_date', {ascending:true});
+  if(dateFrom) q = q.gte('planned_production_date', dateFrom);
+  if(dateTo) q = q.lte('planned_production_date', dateTo);
+  const { data, error } = await q;
+  if(error) throw error;
+  return data || [];
+}
+async function loadPalletsFull(filters){
+  filters = filters || {};
+  let q = sb.from('costco_pallets').select('*, costco_pallet_lots(*)').is('deleted_at', null).order('pallet_no');
+  if(filters.status) q = q.eq('status', filters.status);
+  if(filters.statusIn) q = q.in('status', filters.statusIn);
+  if(filters.productId) q = q.eq('product_id', filters.productId);
+  if(filters.countryId) q = q.eq('country_id', filters.countryId);
+  if(filters.orderId) q = q.eq('order_id', filters.orderId);
+  if(filters.planId) q = q.eq('production_plan_id', filters.planId);
+  const { data, error } = await q;
+  if(error) throw error;
+  return data || [];
+}
+function availableStockFor(pallets, productId, countryId){
+  return (pallets||[]).filter(p=>p.status==='재고보유' && p.product_id===productId && (!countryId || p.country_id===countryId));
+}
+function orderCoverage(order, pallets){
+  const linked = (pallets||[]).filter(p=>p.order_id===order.id && p.status!=='취소');
+  const matched = linked.filter(p=>p.status==='매칭완료').length;
+  const dispatched = linked.filter(p=>p.status==='출고완료').length;
+  const reserved = matched + dispatched;
+  const shortage = Math.max(0, (order.planned_pallet_count||0) - reserved);
+  return { matched, dispatched, reserved, shortage };
+}
+function orderStatusOf(order, pallets){
+  const linked = (pallets||[]).filter(p=>p.order_id===order.id && p.status!=='취소');
+  const dispatched = linked.filter(p=>p.status==='출고완료').length;
+  const matched = linked.filter(p=>p.status==='매칭완료').length;
+  const reserved = matched + dispatched;
+  if(dispatched >= order.planned_pallet_count) return '출고완료';
+  if(reserved >= order.planned_pallet_count) return '출고대기';
+  if(reserved > 0) return '부분진행';
+  return '미착수';
+}
+function orderStatusBadge(status){
+  const map = { '출고완료':'b-green', '출고대기':'b-blue', '부분진행':'b-amber', '미착수':'b-navy' };
+  return `<span class="badge ${map[status]||'b-navy'}">${status}</span>`;
+}
+function planStatusBadge(status){
+  const map = { '계획중':'b-navy', '생산완료':'b-blue', '취소':'b-red' };
+  return `<span class="badge ${map[status]||'b-navy'}">${status}</span>`;
+}
+function palletStatusBadge2(status){
+  const map = { '재고보유':'b-green', '매칭완료':'b-amber', '출고완료':'b-blue', '품질보류':'b-red', '취소':'b-navy' };
+  return `<span class="badge ${map[status]||'b-navy'}">${status}</span>`;
+}
+function startOfWeekISO(iso){
+  const d = new Date(iso+'T00:00:00');
+  const day = d.getDay(); // 0=Sun
+  const diff = (day===0? -6 : 1-day);
+  d.setDate(d.getDate()+diff);
+  return fmtDateISO(d);
+}
+</script>
+<script>
+/* ============================================================
+   캘린더 (월간 전체 진행 현황)
+   ============================================================ */
+let CAL_STATE = (()=>{ const t=todayKST(); return { year:+t.slice(0,4), month:+t.slice(5,7) }; })();
+function calMonthKey(){ return `${CAL_STATE.year}-${String(CAL_STATE.month).padStart(2,'0')}`; }
+function calShiftMonth(delta){
+  let m = CAL_STATE.month + delta, y = CAL_STATE.year;
+  while(m<1){ m+=12; y--; } while(m>12){ m-=12; y++; }
+  CAL_STATE.year=y; CAL_STATE.month=m;
+  switchTab('calendar');
+}
+function calMonthGridDates(){
+  const first = `${calMonthKey()}-01`;
+  const gridStart = startOfWeekISO(first);
+  const lastOfMonth = lastDayOfMonthISO(calMonthKey());
+  const gridEndAnchor = startOfWeekISO(lastOfMonth);
+  const totalDays = Math.round((new Date(gridEndAnchor+'T00:00:00') - new Date(gridStart+'T00:00:00'))/86400000) + 7;
+  return Array.from({length: totalDays}, (_,i)=>addDaysISO(gridStart, i));
+}
+async function renderCalendarTab(){
+  const today = todayKST();
+  const monthKey = calMonthKey();
+  const monthStart = `${monthKey}-01`;
+  const monthEnd = lastDayOfMonthISO(monthKey);
+  const gridDates = calMonthGridDates();
+  const gridStart = gridDates[0], gridEnd = gridDates[gridDates.length-1];
+
+  const [ordersAll, plansAll, pallets, dispatchLinksRaw] = await Promise.all([
+    loadOrdersFull(null, null),
+    loadProductionPlans(null, null),
+    loadPalletsFull({}),
+    sb.from('costco_dispatch_pallets').select('pallet_id, costco_dispatches(actual_ship_date)').then(r=>r.data||[]),
+  ]);
+  const activeOrders = ordersAll.filter(o=>o.status!=='취소');
+  const activePlans = plansAll.filter(p=>p.status!=='취소');
+  const activePallets = pallets.filter(p=>p.status!=='취소');
+  const dispatchDateByPallet = {};
+  dispatchLinksRaw.forEach(l=>{ if(l.costco_dispatches?.actual_ship_date) dispatchDateByPallet[l.pallet_id] = l.costco_dispatches.actual_ship_date; });
+
+  // 캘린더에 표시할 국가 목록 (실제 데이터가 있는 국가만)
+  const calCountryIds = [...new Set([
+    ...activePallets.map(p=>p.country_id),
+    ...activeOrders.map(o=>o.country_id),
+  ].filter(Boolean))];
+
+  // ---- 일자별 집계 (그리드 범위 내) ----
+  function dayCalInfo(date){
+    const dayPlans = activePlans.filter(p=>p.planned_production_date===date);
+    const planQty = dayPlans.reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+    const planDoneQty = dayPlans.filter(p=>p.status==='생산완료').reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+    const planByCountry = {}, planDoneByCountry = {};
+    dayPlans.forEach(p=>{
+      const key = p.country_id || 'none';
+      planByCountry[key] = (planByCountry[key]||0) + (p.planned_pallet_count||0);
+      if(p.status==='생산완료') planDoneByCountry[key] = (planDoneByCountry[key]||0) + (p.planned_pallet_count||0);
+    });
+    const planBreakdown = Object.entries(planByCountry).map(([countryId,qty])=>({
+      name: countryId==='none' ? '국가 미지정' : countryName(countryId), qty
+    }));
+    const planDoneBreakdown = Object.entries(planDoneByCountry).map(([countryId,qty])=>({
+      name: countryId==='none' ? '국가 미지정' : countryName(countryId), qty
+    }));
+
+    const dayOrders = activeOrders.filter(o=>o.planned_ship_date===date);
+    const shipPlanQty = dayOrders.reduce((a,o)=>a+(o.planned_pallet_count||0),0);
+    const destByOrder = {};
+    dayOrders.forEach(o=>{
+      const key = o.destination_id || 'none';
+      destByOrder[key] = (destByOrder[key]||0) + (o.planned_pallet_count||0);
+    });
+    const shipDestBreakdown = Object.entries(destByOrder).map(([destId,qty])=>({
+      name: destId==='none' ? '납품처 미지정' : destinationName(destId), qty
+    }));
+
+    const shippedToday = activePallets.filter(p=>dispatchDateByPallet[p.id]===date);
+    const shipDoneQty = shippedToday.length;
+    const shipDoneByCountry = {};
+    shippedToday.forEach(p=>{
+      const key = p.country_id || 'none';
+      shipDoneByCountry[key] = (shipDoneByCountry[key]||0) + 1;
+    });
+    const shipDoneBreakdown = Object.entries(shipDoneByCountry).map(([countryId,qty])=>({
+      name: countryId==='none' ? '국가 미지정' : countryName(countryId), qty
+    }));
+
+    // 국가별 순재고(그 날짜 기준) = 매칭 제외 여유재고(재고보유, 생산일<=D) - 그 시점까지 출고예정일 도래한 미매칭 부족수요
+    // → 플러스면 여유재고, 마이너스면 부족
+    const countryStocks = calCountryIds.map(countryId=>{
+      const freeNow = activePallets.filter(p=>p.country_id===countryId && p.status==='재고보유' && p.production_date && p.production_date<=date).length;
+      const dueOrders = activeOrders.filter(o=>o.country_id===countryId && (o.planned_ship_date||'')<=date && orderStatusOf(o,pallets)!=='출고완료');
+      const shortage = dueOrders.reduce((a,o)=>a+Math.max(0,orderCoverage(o,pallets).shortage),0);
+      return { countryId, name: countryName(countryId), net: freeNow - shortage };
+    }).filter(c=>c.net!==0);
+    const netTotal = countryStocks.reduce((a,c)=>a+c.net,0);
+
+    return { date, planQty, planDoneQty, planBreakdown, planDoneBreakdown, shipPlanQty, shipDestBreakdown, shipDoneQty, shipDoneBreakdown, countryStocks, netTotal, dayPlans, dayOrders, shippedToday };
+  }
+  const infoByDate = {};
+  gridDates.forEach(d=>{ infoByDate[d] = dayCalInfo(d); });
+  STATE.cache.calInfoByDate = infoByDate;
+
+  // ---- 이번 달 요약 ----
+  const monthDates = gridDates.filter(d=>d>=monthStart && d<=monthEnd);
+  const monthPlanQty = monthDates.reduce((a,d)=>a+infoByDate[d].planQty,0);
+  const monthShipPlanQty = monthDates.reduce((a,d)=>a+infoByDate[d].shipPlanQty,0);
+  const monthShipDoneQty = monthDates.reduce((a,d)=>a+infoByDate[d].shipDoneQty,0);
+  const todayInfo = infoByDate[today];
+  const todayCountryStocks = todayInfo ? todayInfo.countryStocks : [];
+
+  const weekDayNames = ['월','화','수','목','금','토','일'];
+  const weeks = [];
+  for(let i=0;i<gridDates.length;i+=7) weeks.push(gridDates.slice(i,i+7));
+
+  function stockChip(c){ return calStockChip(c); }
+
+  function dayCellHtml(date){
+    const info = infoByDate[date];
+    const inMonth = date>=monthStart && date<=monthEnd;
+    const isToday = date===today;
+    const dayNum = +date.slice(8,10);
+    const dow = new Date(date+'T00:00:00').getDay();
+    const dowColor = dow===0 ? 'var(--red)' : dow===6 ? 'var(--blue)' : 'var(--ink)';
+    const hasDetail = info.planBreakdown.length || info.planDoneBreakdown.length || info.shipDestBreakdown.length || info.shipDoneBreakdown.length;
+    return `
+      <div class="cal-cell ${inMonth?'':'cal-cell-out'} ${isToday?'cal-cell-today':''}">
+        <div class="cal-daynum" style="color:${inMonth?dowColor:'var(--gray)'};">${dayNum}${isToday?' <span class="cal-today-chip">오늘</span>':''}</div>
+        ${inMonth ? `
+        <div class="cal-tags">
+          ${info.planQty>0?`<div class="cal-tag cal-tag-plan">생산계획 ${info.planQty}</div>`:''}
+          ${info.planDoneQty>0?`<div class="cal-tag cal-tag-plandone">생산완료 ${info.planDoneQty}</div>`:''}
+          ${info.shipPlanQty>0?`<div class="cal-tag cal-tag-amber">출고예정 ${info.shipPlanQty}</div>`:''}
+          ${info.shipDoneQty>0?`<div class="cal-tag cal-tag-green">출고완료 ${info.shipDoneQty}</div>`:''}
+        </div>
+        <div class="cal-stock">${info.countryStocks.length ? info.countryStocks.map(stockChip).join('') : '<span class="cal-cstock cal-cstock-zero">재고 0</span>'}</div>
+        ${hasDetail ? `
+        <details class="cal-details" onclick="event.stopPropagation()">
+          <summary>상세보기 ▾</summary>
+          <div class="cal-details-body">
+            ${info.planBreakdown.length?`<div class="cal-details-row"><span class="cal-details-lbl">생산계획</span>${info.planBreakdown.map(d=>`<span class="cal-tag cal-tag-plan">${esc(d.name)} ${d.qty}</span>`).join('')}</div>`:''}
+            ${info.planDoneBreakdown.length?`<div class="cal-details-row"><span class="cal-details-lbl">생산완료</span>${info.planDoneBreakdown.map(d=>`<span class="cal-tag cal-tag-plandone">${esc(d.name)} ${d.qty}</span>`).join('')}</div>`:''}
+            ${info.shipDestBreakdown.length?`<div class="cal-details-row"><span class="cal-details-lbl">출고예정</span>${info.shipDestBreakdown.map(d=>`<span class="cal-tag cal-tag-amber">${esc(d.name)} ${d.qty}</span>`).join('')}</div>`:''}
+            ${info.shipDoneBreakdown.length?`<div class="cal-details-row"><span class="cal-details-lbl">출고완료</span>${info.shipDoneBreakdown.map(d=>`<span class="cal-tag cal-tag-green">${esc(d.name)} ${d.qty}</span>`).join('')}</div>`:''}
+          </div>
+        </details>` : ''}
+        ` : ''}
+      </div>`;
+  }
+
+  const html = `
+    <div class="panel">
+      <div class="panel-body" style="display:flex;gap:14px;flex-wrap:wrap;">
+        <div class="stat-card c-blue" style="flex:1;min-width:140px;">
+          <div class="lbl">이번 달 생산계획</div><div class="val">${monthPlanQty}<small>파렛트</small></div>
+        </div>
+        <div class="stat-card c-amber" style="flex:1;min-width:140px;">
+          <div class="lbl">이번 달 출고예정</div><div class="val">${monthShipPlanQty}<small>파렛트</small></div>
+        </div>
+        <div class="stat-card c-green" style="flex:1;min-width:140px;">
+          <div class="lbl">이번 달 출고완료</div><div class="val">${monthShipDoneQty}<small>파렛트</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>${CAL_STATE.year}년 ${CAL_STATE.month}월</h3>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="cal-legend">
+            <span><i class="cal-dot" style="background:var(--blue);"></i>생산계획</span>
+            <span><i class="cal-dot" style="background:var(--amber);"></i>출고예정</span>
+            <span><i class="cal-dot" style="background:var(--green);"></i>출고완료</span>
+            <span><i class="cal-dot" style="background:var(--ink-soft);"></i>추정재고</span>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="calShiftMonth(-1)">‹ 이전달</button>
+          <button class="btn btn-ghost btn-sm" onclick="CAL_STATE={year:+todayKST().slice(0,4),month:+todayKST().slice(5,7)}; switchTab('calendar')">오늘</button>
+          <button class="btn btn-ghost btn-sm" onclick="calShiftMonth(1)">다음달 ›</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="cal-grid cal-grid-head">
+          ${weekDayNames.map(n=>`<div class="cal-headcell">${n}</div>`).join('')}
+        </div>
+        ${weeks.map(week=>`<div class="cal-grid">${week.map(dayCellHtml).join('')}</div>`).join('')}
+      </div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+function calStockChip(c){
+  const positive = c.net>=0;
+  return `<span class="cal-cstock ${positive?'cal-cstock-pos':'cal-cstock-neg'}">${esc(c.name)} ${positive?'+':''}${c.net}</span>`;
+}
+function showCalDayDetail(date){
+  const info = (STATE.cache.calInfoByDate||{})[date];
+  if(!info) return;
+  const planRows = info.dayPlans.map(p=>`
+    <tr>
+      <td>${esc(p.plan_no||'')}</td>
+      <td>${esc(productName(p.product_id))}</td>
+      <td>${esc(countryName(p.country_id))}</td>
+      <td>${p.planned_pallet_count}</td>
+      <td>${planStatusBadge(p.status)}</td>
+    </tr>`).join('');
+  const orderRows = info.dayOrders.map(o=>`
+    <tr>
+      <td>${esc(o.order_no)}</td>
+      <td>${esc(productName(o.product_id))}</td>
+      <td>${esc(countryName(o.country_id))}</td>
+      <td>${esc(destinationName(o.destination_id))}</td>
+      <td>${o.planned_pallet_count}</td>
+    </tr>`).join('');
+  const shipRows = info.shippedToday.map(p=>`
+    <tr>
+      <td>${esc(p.pallet_no)}</td>
+      <td>${esc(productName(p.product_id))}</td>
+      <td>${esc(countryName(p.country_id))}</td>
+    </tr>`).join('');
+
+  const body = `
+    <div class="panel" style="margin-bottom:14px;"><div class="panel-body" style="font-size:13px;line-height:1.9;">
+      생산계획 <b style="color:var(--blue);">${info.planQty}</b> (완료 ${info.planDoneQty}) &nbsp;·&nbsp;
+      출고예정 <b style="color:var(--amber);">${info.shipPlanQty}</b> &nbsp;·&nbsp;
+      출고완료 <b style="color:var(--green);">${info.shipDoneQty}</b>
+      <div style="margin-top:8px;">해당일 기준 국가별 순재고(매칭 제외, 부족 시 마이너스):
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+          ${info.countryStocks.length ? info.countryStocks.map(stockChipStandalone).join('') : '<span class="cal-cstock cal-cstock-zero">재고 0</span>'}
+        </div>
+      </div>
+    </div></div>
+    <h4 style="margin-bottom:8px;font-size:13.5px;">생산계획</h4>
+    <div class="table-wrap"><table>
+      <thead><tr><th>계획번호</th><th>파렛트유형</th><th>국가</th><th>수량</th><th>상태</th></tr></thead>
+      <tbody>${planRows || `<tr><td colspan="5" class="empty-row">해당 없음</td></tr>`}</tbody>
+    </table></div>
+    <h4 style="margin:14px 0 8px;font-size:13.5px;">출고예정 발주</h4>
+    <div class="table-wrap"><table>
+      <thead><tr><th>발주번호</th><th>파렛트유형</th><th>국가</th><th>납품처</th><th>발주수량</th></tr></thead>
+      <tbody>${orderRows || `<tr><td colspan="5" class="empty-row">해당 없음</td></tr>`}</tbody>
+    </table></div>
+    <h4 style="margin:14px 0 8px;font-size:13.5px;">출고완료 파렛트</h4>
+    <div class="table-wrap"><table>
+      <thead><tr><th>파렛트일련번호</th><th>파렛트유형</th><th>국가</th></tr></thead>
+      <tbody>${shipRows || `<tr><td colspan="3" class="empty-row">해당 없음</td></tr>`}</tbody>
+    </table></div>
+  `;
+  openModal(`${fmtDateDisp(date)} 상세`, body, [{ label:'닫기', cls:'btn-ghost', onClick: closeModal }], true);
+}
+</script>
+<script>
+function donutSvg(percent, color, label, sub, centerTextOverride){
+  const size=132, r=50, stroke=14;
+  const c = 2*Math.PI*r;
+  const pct = Math.max(0, Math.min(100, percent));
+  const offset = c * (1-pct/100);
+  const centerText = centerTextOverride!==undefined ? centerTextOverride : `${Math.round(pct)}%`;
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="#eef0f3" stroke-width="${stroke}"/>
+        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
+          stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"
+          transform="rotate(-90 ${size/2} ${size/2})"/>
+        <text x="${size/2}" y="${size/2+7}" text-anchor="middle" font-size="22" font-weight="800" fill="var(--ink)">${esc(String(centerText))}</text>
+      </svg>
+      <div style="text-align:center;">
+        <div style="font-size:13px;font-weight:700;">${esc(label)}</div>
+        ${sub?`<div style="font-size:11.5px;color:var(--ink-soft);">${esc(sub)}</div>`:''}
+      </div>
+    </div>`;
+}
+const DONUT_COLORS = ['var(--blue)','var(--green)','var(--amber)','#8b5cf6','#0891b2','var(--red)','#65a30d'];
+function multiDonutSvg(segments, title, centerLabel){
+  const size=132, r=50, stroke=14;
+  const c = 2*Math.PI*r;
+  const total = segments.reduce((a,s)=>a+s.value,0);
+  let offsetAcc = 0;
+  const circles = total>0 ? segments.map((s,i)=>{
+    const frac = s.value/total;
+    const dash = frac*c;
+    const circle = `<circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${stroke}"
+      stroke-dasharray="${dash} ${c-dash}" stroke-dashoffset="${-offsetAcc}"
+      transform="rotate(-90 ${size/2} ${size/2})"/>`;
+    offsetAcc += dash;
+    return circle;
+  }).join('') : '';
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="#eef0f3" stroke-width="${stroke}"/>
+        ${circles}
+        <text x="${size/2}" y="${size/2+7}" text-anchor="middle" font-size="20" font-weight="800" fill="var(--ink)">${centerLabel}</text>
+      </svg>
+      <div style="text-align:center;max-width:170px;">
+        <div style="font-size:13px;font-weight:700;">${esc(title)}</div>
+        ${segments.length?`<div style="font-size:11px;color:var(--ink-soft);line-height:1.7;text-align:left;margin-top:2px;">
+          ${segments.map(s=>`<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${s.color};margin-right:4px;"></span>${esc(s.label)}: ${s.value}`).join('<br>')}
+        </div>`:`<div style="font-size:11.5px;color:var(--ink-soft);">여유재고 없음</div>`}
+      </div>
+    </div>`;
+}
+function computeAtRiskOrderIds(activeOrders, activePlans, pallets){
+  const atRisk = new Set();
+  const keys = new Set();
+  activeOrders.forEach(o=>keys.add(o.product_id+'|'+o.country_id));
+  keys.forEach(key=>{
+    const [productId, countryId] = key.split('|');
+    const freeNow = pallets.filter(p=>p.status==='재고보유' && p.product_id===productId && p.country_id===countryId).length;
+    const futurePlans = activePlans.filter(p=>p.status==='계획중' && p.product_id===productId && p.country_id===countryId)
+      .sort((a,b)=> (a.planned_production_date||'') < (b.planned_production_date||'') ? -1 : 1);
+    const groupOrders = activeOrders.filter(o=>o.product_id===productId && o.country_id===countryId && orderStatusOf(o,pallets)!=='출고완료')
+      .map(o=>({ o, shortage: orderCoverage(o,pallets).shortage }))
+      .filter(x=>x.shortage>0)
+      .sort((a,b)=> (a.o.planned_ship_date||'') < (b.o.planned_ship_date||'') ? -1 : 1);
+    let supply = freeNow, demand = 0, planIdx = 0;
+    groupOrders.forEach(({o, shortage})=>{
+      const cutoff = addDaysISO(o.planned_ship_date||'', -1); // 출고예정일 전날까지 생산되어야 안전 (당일 생산은 리드타임 부족으로 경고 대상)
+      while(planIdx<futurePlans.length && (futurePlans[planIdx].planned_production_date||'') <= cutoff){
+        supply += futurePlans[planIdx].planned_pallet_count||0;
+        planIdx++;
+      }
+      demand += shortage;
+      if(demand > supply) atRisk.add(o.id);
+    });
+  });
+  return atRisk;
+}
+function computeInventoryStatusByGroup(activeOrders, activePlans, pallets){
+  const groupKeys = new Set();
+  activeOrders.forEach(o=>{ if(o.product_id && o.country_id && orderStatusOf(o,pallets)!=='출고완료') groupKeys.add(o.product_id+'|'+o.country_id); });
+  pallets.forEach(p=>{ if(p.status==='재고보유' && p.product_id && p.country_id) groupKeys.add(p.product_id+'|'+p.country_id); });
+  activePlans.forEach(p=>{ if(p.status==='계획중' && p.product_id && p.country_id) groupKeys.add(p.product_id+'|'+p.country_id); });
+
+  const rows = [...groupKeys].map(key=>{
+    const [productId, countryId] = key.split('|');
+    const freeNow = pallets.filter(p=>p.status==='재고보유' && p.product_id===productId && p.country_id===countryId).length;
+
+    const groupOrders = activeOrders
+      .filter(o=>o.product_id===productId && o.country_id===countryId && orderStatusOf(o,pallets)!=='출고완료')
+      .map(o=>({ o, cov: orderCoverage(o,pallets) }))
+      .sort((a,b)=> (a.o.planned_ship_date||'') < (b.o.planned_ship_date||'') ? -1 : 1);
+
+    const demandQty = groupOrders.reduce((a,r)=>a + Math.max(0, (r.o.planned_pallet_count||0) - r.cov.dispatched), 0); // 출고예정(잔여)
+    const matchedQty = groupOrders.reduce((a,r)=>a + r.cov.matched, 0); // 이미 매칭완료(재고 확보)된 수량
+    const totalShortage = groupOrders.reduce((a,r)=>a + Math.max(0, r.cov.shortage), 0); // 매칭 기준 부족수요
+
+    const futurePlans = activePlans.filter(p=>p.status==='계획중' && p.product_id===productId && p.country_id===countryId)
+      .sort((a,b)=> (a.planned_production_date||'') < (b.planned_production_date||'') ? -1 : 1);
+    const planQty = futurePlans.reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+
+    const freeStock = Math.max(0, freeNow - totalShortage);
+    const shortage = Math.max(0, totalShortage - freeNow);
+
+    let statusKind = 'ok', resolveDate = null;
+    if(shortage>0){
+      const earliestCutoff = groupOrders.filter(r=>r.cov.shortage>0).reduce((min,r)=>{
+        const cutoff = addDaysISO(r.o.planned_ship_date||'', -1);
+        return (min===null || cutoff<min) ? cutoff : min;
+      }, null);
+      let cumulative = freeNow;
+      for(const p of futurePlans){
+        if(earliestCutoff!==null && (p.planned_production_date||'')>earliestCutoff) break;
+        cumulative += (p.planned_pallet_count||0);
+        if(cumulative >= totalShortage){ resolveDate = p.planned_production_date; statusKind = 'resolving'; break; }
+      }
+      if(!resolveDate) statusKind = 'risk';
+    }
+    return { productId, countryId, demandQty, matchedQty, freeNow, planQty, freeStock, shortage, statusKind, resolveDate };
+  });
+
+  return rows.filter(r=> r.demandQty>0 || r.freeNow>0 || r.planQty>0)
+    .sort((a,b)=> (b.statusKind==='risk')-(a.statusKind==='risk') || b.shortage - a.shortage || b.demandQty - a.demandQty);
+}
+function invStatusBadge(row){
+  if(row.statusKind==='risk') return '<span class="badge b-red">⚠ 부족위험</span>';
+  if(row.statusKind==='resolving') return `<span class="badge b-amber">생산예정 해소 · ${fmtDateDisp(row.resolveDate)}</span>`;
+  if(row.shortage>0) return '<span class="badge b-amber">부족</span>';
+  return '<span class="badge b-green">정상</span>';
+}
+function invGroupDetail(productId, countryId){
+  const { activeOrders, activePlans, pallets } = STATE.cache.dashInv || { activeOrders:[], activePlans:[], pallets:[] };
+  const groupOrders = activeOrders
+    .filter(o=>o.product_id===productId && o.country_id===countryId && orderStatusOf(o,pallets)!=='출고완료')
+    .map(o=>({ o, cov: orderCoverage(o,pallets) }))
+    .sort((a,b)=> (a.o.planned_ship_date||'') < (b.o.planned_ship_date||'') ? -1 : 1);
+  const futurePlans = activePlans.filter(p=>p.status==='계획중' && p.product_id===productId && p.country_id===countryId)
+    .sort((a,b)=> (a.planned_production_date||'') < (b.planned_production_date||'') ? -1 : 1);
+  const freePallets = pallets.filter(p=>p.status==='재고보유' && p.product_id===productId && p.country_id===countryId)
+    .sort((a,b)=> (a.production_date||'') < (b.production_date||'') ? -1 : 1);
+  return { groupOrders, futurePlans, freePallets };
+}
+function invDetailOrderTable(groupOrders, highlight){
+  if(!groupOrders.length) return `<div class="empty-row">해당하는 발주가 없습니다.</div>`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>발주번호</th><th>출고예정일</th><th>발주수량</th><th>매칭완료</th><th>출고완료</th><th>잔여(출고예정)</th><th>부족</th></tr></thead>
+    <tbody>
+    ${groupOrders.map(({o,cov})=>`
+      <tr>
+        <td>${esc(o.order_no)}</td>
+        <td>${fmtDateDisp(o.planned_ship_date)}</td>
+        <td>${o.planned_pallet_count}</td>
+        <td ${highlight==='matched'?'style="font-weight:700;color:var(--blue);"':''}>${cov.matched}</td>
+        <td>${cov.dispatched}</td>
+        <td>${Math.max(0,(o.planned_pallet_count||0)-cov.dispatched)}</td>
+        <td>${cov.shortage>0?`<b style="color:var(--red)">${cov.shortage}</b>`:'0'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+function invDetailPalletTable(pallets){
+  if(!pallets.length) return `<div class="empty-row">재고보유 상태 파렛트가 없습니다.</div>`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>파렛트일련번호</th><th>생산일</th><th>소비기한</th><th>LOT수</th></tr></thead>
+    <tbody>
+    ${pallets.map(p=>`
+      <tr>
+        <td>${esc(p.pallet_no)}</td>
+        <td>${fmtDateDisp(p.production_date)}</td>
+        <td>${palletExpirationDisplay(p)}</td>
+        <td>${(p.costco_pallet_lots||[]).length}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+function invDetailPlanTable(plans){
+  if(!plans.length) return `<div class="empty-row">계획중 상태인 생산계획이 없습니다.</div>`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>계획번호</th><th>생산예정일</th><th>수량</th><th>생산담당자</th></tr></thead>
+    <tbody>
+    ${plans.map(p=>`
+      <tr>
+        <td>${esc(p.plan_no||'')}</td>
+        <td>${fmtDateDisp(p.planned_production_date)}</td>
+        <td>${p.planned_pallet_count}</td>
+        <td>${esc(p.production_manager||'-')}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+function showInvDetail(productId, countryId, metric){
+  const { groupOrders, futurePlans, freePallets } = invGroupDetail(productId, countryId);
+  const label = `${productName(productId)} · ${countryName(countryId)}`;
+  const totalShortage = groupOrders.reduce((a,r)=>a+Math.max(0,r.cov.shortage),0);
+  const freeNow = freePallets.length;
+
+  let title = '', bodyHtml = '';
+  if(metric==='demand'){
+    title = `출고예정 근거 · ${label}`;
+    bodyHtml = `<div style="margin-bottom:10px;font-size:12.5px;color:var(--ink-soft);">아직 출고완료되지 않은 발주의 잔여수량 합계입니다.</div>${invDetailOrderTable(groupOrders)}`;
+  } else if(metric==='matched'){
+    title = `매칭완료 근거 · ${label}`;
+    bodyHtml = `<div style="margin-bottom:10px;font-size:12.5px;color:var(--ink-soft);">이미 재고와 매칭되어 출고만 남은 수량입니다(매칭완료 컬럼 참고).</div>${invDetailOrderTable(groupOrders,'matched')}`;
+  } else if(metric==='free'){
+    title = `현재고 근거 · ${label}`;
+    bodyHtml = `<div style="margin-bottom:10px;font-size:12.5px;color:var(--ink-soft);">현재 '재고보유' 상태(아직 매칭 안 됨)인 파렛트 목록입니다.</div>${invDetailPalletTable(freePallets)}`;
+  } else if(metric==='plan'){
+    title = `생산계획 근거 · ${label}`;
+    bodyHtml = `<div style="margin-bottom:10px;font-size:12.5px;color:var(--ink-soft);">'계획중' 상태인 향후 생산계획 목록입니다.</div>${invDetailPlanTable(futurePlans)}`;
+  } else if(metric==='freeStock'){
+    title = `여유재고 근거 · ${label}`;
+    const freeStock = Math.max(0, freeNow - totalShortage);
+    bodyHtml = `
+      <div class="panel" style="margin-bottom:14px;"><div class="panel-body" style="font-size:13px;line-height:1.9;">
+        현재고 <b>${freeNow}</b> − 부족수요(매칭 안 된 발주분) <b>${totalShortage}</b> = 여유재고 <b style="color:var(--green)">${freeStock}</b>
+      </div></div>
+      <h4 style="margin-bottom:8px;font-size:13.5px;">현재고 상세</h4>
+      ${invDetailPalletTable(freePallets)}
+      <h4 style="margin:14px 0 8px;font-size:13.5px;">매칭 안 된 부족수요 상세</h4>
+      ${invDetailOrderTable(groupOrders.filter(r=>r.cov.shortage>0))}
+    `;
+  } else if(metric==='shortage'){
+    title = `부족재고 근거 · ${label}`;
+    const shortage = Math.max(0, totalShortage - freeNow);
+    let cumulative = freeNow, resolveDate = null, resolveRows = [];
+    for(const p of futurePlans){
+      cumulative += (p.planned_pallet_count||0);
+      resolveRows.push(p);
+      if(cumulative >= totalShortage){ resolveDate = p.planned_production_date; break; }
+    }
+    bodyHtml = `
+      <div class="panel" style="margin-bottom:14px;"><div class="panel-body" style="font-size:13px;line-height:1.9;">
+        부족수요(매칭 안 된 발주분) <b>${totalShortage}</b> − 현재고 <b>${freeNow}</b> = 부족재고 <b style="color:var(--red)">${shortage}</b><br>
+        ${shortage<=0 ? '' : resolveDate
+          ? `→ 예정된 생산계획을 누적하면 <b>${fmtDateDisp(resolveDate)}</b> 생산분까지 반영 시 부족이 해소됩니다.`
+          : `→ 예정된 생산계획을 모두 더해도(${futurePlans.reduce((a,p)=>a+(p.planned_pallet_count||0),0)}개) 부족분을 채우지 못합니다. 생산계획 추가가 필요합니다.`}
+      </div></div>
+      <h4 style="margin-bottom:8px;font-size:13.5px;">부족을 유발한 발주</h4>
+      ${invDetailOrderTable(groupOrders.filter(r=>r.cov.shortage>0))}
+      <h4 style="margin:14px 0 8px;font-size:13.5px;">해소에 사용되는 생산계획(생산예정일 순)</h4>
+      ${invDetailPlanTable(resolveDate ? resolveRows : futurePlans)}
+    `;
+  }
+  openModal(title, bodyHtml, [{ label:'닫기', cls:'btn-ghost', onClick: closeModal }], true);
+}
+let DASH_FILTERS = { periodMode:'month', from: todayKST().slice(0,7)+'-01', to: lastDayOfMonthISO(todayKST().slice(0,7)) };
+let DASH_WEEK_OFFSET = 0;
+let DASH_ORDER_VIEW = 'progress';
+async function renderDashboard(){
+  const today = todayKST();
+  const weekStart = startOfWeekISO(today);
+  const calWeekStart = addDaysISO(weekStart, DASH_WEEK_OFFSET*7);
+
+  const [ordersAll, plansAll, pallets, reservations] = await Promise.all([
+    loadOrdersFull(null, null),
+    loadProductionPlans(null, null),
+    loadPalletsFull({}),
+    sb.from('costco_warehouse_reservations').select('order_no, reservation_status').then(r=>r.data||[]),
+  ]);
+  const resvByOrderNo = {};
+  reservations.forEach(r=>{ resvByOrderNo[r.order_no] = r.reservation_status; });
+  const activeOrders = ordersAll.filter(o=>o.status!=='취소');
+  const activePlans = plansAll.filter(p=>p.status!=='취소');
+  STATE.cache.dashInv = { activeOrders, activePlans, pallets };
+
+  const periodLabel = (DASH_FILTERS.periodMode==='month') ? (DASH_FILTERS.from||'').slice(0,7).replace('-','.')+'월'
+    : (DASH_FILTERS.periodMode==='year') ? (DASH_FILTERS.from||'').slice(0,4)+'년'
+    : `${fmtDateDisp(DASH_FILTERS.from)}~${fmtDateDisp(DASH_FILTERS.to)}`;
+
+  // ---- 도넛 1: 생산계획 대비 생산량 ----
+  const periodPlans = activePlans.filter(p=>(p.planned_production_date||'')>=DASH_FILTERS.from && (p.planned_production_date||'')<=DASH_FILTERS.to);
+  const planTotalQty = periodPlans.reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+  const planDoneQty = periodPlans.filter(p=>p.status==='생산완료').reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+  const planPct = planTotalQty>0 ? Math.round(planDoneQty/planTotalQty*100) : 0;
+
+  // ---- 도넛 2: 출고예정 대비 실제 출고 ----
+  const periodOrders = activeOrders.filter(o=>(o.planned_ship_date||'')>=DASH_FILTERS.from && (o.planned_ship_date||'')<=DASH_FILTERS.to);
+  const orderTotalQty = periodOrders.reduce((a,o)=>a+(o.planned_pallet_count||0),0);
+  const orderDispatchedQty = periodOrders.reduce((a,o)=>a+orderCoverage(o,pallets).dispatched,0);
+  const orderPct = orderTotalQty>0 ? Math.round(orderDispatchedQty/orderTotalQty*100) : 0;
+
+  // ---- 도넛 3: 출고대기(미착수 포함, 아직 출고완료되지 않은 전체 수량) ----
+  const waitingPeriodCount = orderTotalQty - orderDispatchedQty;
+  const waitingPct = orderTotalQty>0 ? Math.round(waitingPeriodCount/orderTotalQty*100) : 0;
+
+  // ---- 재고현황: 파렛트유형×국가별 출고예정/현재고/생산계획/여유재고/부족재고 ----
+  const invRows = computeInventoryStatusByGroup(activeOrders, activePlans, pallets);
+
+  // ---- 도넛 4: 입고예약 완료율 ----
+  const periodOrderNos = [...new Set(periodOrders.map(o=>o.order_no))];
+  const resvDoneCount = periodOrderNos.filter(no=>resvByOrderNo[no]==='예약완료').length;
+  const resvPct = periodOrderNos.length>0 ? Math.round(resvDoneCount/periodOrderNos.length*100) : 0;
+
+  // ---- 도넛 5: 발주확인 완료율 ----
+  const confirmDoneCount = periodOrders.filter(o=>o.production_confirmed).length;
+  const confirmPct = periodOrders.length>0 ? Math.round(confirmDoneCount/periodOrders.length*100) : 0;
+
+  function dayInfo(date){
+    const planQty = activePlans.filter(p=>p.planned_production_date===date).reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+    const dayOrders = activeOrders.filter(o=>o.planned_ship_date===date);
+    const orderQty = dayOrders.reduce((a,o)=>a+(o.planned_pallet_count||0),0);
+    const byDest = {};
+    dayOrders.forEach(o=>{
+      const key = o.destination_id || 'none';
+      byDest[key] = (byDest[key]||0) + (o.planned_pallet_count||0);
+    });
+    const destBreakdown = Object.entries(byDest).map(([destId,qty])=>({
+      name: destId==='none' ? '납품처 미지정' : destinationName(destId), qty
+    }));
+    return { date, planQty, orderQty, destBreakdown, isToday: date===today };
+  }
+  const weekDayNames = ['월','화','수','목','금','토','일'];
+  const weekDays = Array.from({length:7}, (_,i)=>{
+    const date = addDaysISO(calWeekStart, i);
+    return { ...dayInfo(date), name: weekDayNames[i] };
+  });
+
+  const atRiskIds = computeAtRiskOrderIds(activeOrders, activePlans, pallets);
+  const orderRows = activeOrders.map(o=>{
+    const cov = orderCoverage(o, pallets);
+    const progressPct = o.planned_pallet_count>0 ? Math.round((cov.reserved/o.planned_pallet_count)*100) : 0;
+    const resvStatus = resvByOrderNo[o.order_no] || '미완료';
+    return { o, matched: cov.matched, dispatched: cov.dispatched, reserved: cov.reserved, shortage: cov.shortage, status: orderStatusOf(o, pallets), progressPct, resvStatus, atRisk: atRiskIds.has(o.id) };
+  }).sort((a,b)=> (a.o.planned_ship_date||'') < (b.o.planned_ship_date||'') ? -1 : 1);
+  const orderProgressRows = orderRows.filter(r=>r.status!=='출고완료');
+  const orderDoneRows = orderRows.filter(r=>r.status==='출고완료');
+  const shownOrderRows = DASH_ORDER_VIEW==='done' ? orderDoneRows : orderProgressRows;
+
+  // ---- 알림: 여유재고 있는데 매칭 안 된 발주 ----
+  const unmatchedAlerts = [];
+  const freeAllByKey = {};
+  pallets.filter(p=>p.status==='재고보유').forEach(p=>{
+    const key = p.product_id+'|'+p.country_id;
+    freeAllByKey[key] = (freeAllByKey[key]||0)+1;
+  });
+  Object.keys(freeAllByKey).forEach(key=>{
+    const [productId, countryId] = key.split('|');
+    const needy = activeOrders.some(o=>o.product_id===productId && o.country_id===countryId && orderStatusOf(o,pallets)!=='출고완료' && orderCoverage(o,pallets).reserved < (o.planned_pallet_count||0));
+    if(needy){
+      unmatchedAlerts.push({ name: `${productName(productId)} · ${countryName(countryId)}`, count: freeAllByKey[key] });
+    }
+  });
+
+  const html = `
+    ${unmatchedAlerts.length? `
+    <div class="panel" style="border-left:4px solid var(--amber);">
+      <div class="panel-body">
+        <b style="color:var(--accent-dark);">⚠ 매칭이 필요한 여유재고가 있습니다</b>
+        <div style="margin-top:6px;font-size:13px;color:var(--ink-soft);">
+          ${unmatchedAlerts.map(a=>`${esc(a.name)}: 여유재고 ${a.count}개`).join(' &nbsp;·&nbsp; ')}
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="switchTab('dispatch')">출고관리에서 매칭하기</button>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>기간 선택</h3>
+        <div class="toolbar">${periodPickerHtml(DASH_FILTERS, 'dashboard', 'DASH_FILTERS')}</div>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;gap:28px;flex-wrap:wrap;justify-content:space-around;padding:8px 0;">
+          ${donutSvg(planPct, 'var(--blue)', '생산계획', `${esc(periodLabel)} · ${planDoneQty}/${planTotalQty} 파렛트`)}
+          ${donutSvg(orderPct, 'var(--green)', '출고예정', `${esc(periodLabel)} · ${orderDispatchedQty}/${orderTotalQty} 파렛트`)}
+          ${donutSvg(waitingPct, 'var(--amber)', '출고대기', `${esc(periodLabel)} · 전체 ${orderTotalQty}파렛트 중 미출고`, `${waitingPeriodCount}`)}
+          ${donutSvg(confirmPct, '#0ea5e9', '발주확인', `${confirmDoneCount}/${periodOrders.length} 건`)}
+          ${donutSvg(resvPct, '#8b5cf6', '입고예약확인', `${resvDoneCount}/${periodOrderNos.length} 건`)}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>재고현황 (파렛트유형 × 국가)</h3></div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>파렛트유형</th><th>국가</th><th>출고예정</th><th>매칭완료</th><th>현재고</th><th>생산계획</th><th>여유재고</th><th>부족재고</th><th>상태</th></tr></thead>
+        <tbody>
+        ${invRows.length? invRows.map(r=>`
+          <tr>
+            <td>${esc(productName(r.productId))}</td>
+            <td>${esc(countryName(r.countryId))}</td>
+            <td class="inv-num" onclick="showInvDetail('${r.productId}','${r.countryId}','demand')">${r.demandQty}</td>
+            <td class="inv-num" onclick="showInvDetail('${r.productId}','${r.countryId}','matched')">${r.matchedQty>0?`<span style="color:var(--blue);font-weight:700;">${r.matchedQty}</span>`:'0'}</td>
+            <td class="inv-num" onclick="showInvDetail('${r.productId}','${r.countryId}','free')">${r.freeNow}</td>
+            <td class="inv-num" onclick="showInvDetail('${r.productId}','${r.countryId}','plan')">${r.planQty}</td>
+            <td class="inv-num" onclick="showInvDetail('${r.productId}','${r.countryId}','freeStock')">${r.freeStock>0?`<b style="color:var(--green)">${r.freeStock}</b>`:'0'}</td>
+            <td class="inv-num" onclick="showInvDetail('${r.productId}','${r.countryId}','shortage')">${r.shortage>0?`<b style="color:var(--red)">${r.shortage}</b>`:'0'}</td>
+            <td>${invStatusBadge(r)}</td>
+          </tr>`).join('') : `<tr><td colspan="9" class="empty-row">표시할 재고 현황이 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>발주번호별 진행현황</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ${DASH_ORDER_VIEW==='progress'?'btn-primary':'btn-ghost'} btn-sm" onclick="DASH_ORDER_VIEW='progress'; switchTab('dashboard')">진행중 (${orderProgressRows.length})</button>
+          <button class="btn ${DASH_ORDER_VIEW==='done'?'btn-primary':'btn-ghost'} btn-sm" onclick="DASH_ORDER_VIEW='done'; switchTab('dashboard')">출고완료 (${orderDoneRows.length})</button>
+        </div>
+      </div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>발주번호</th><th>납품처</th><th>출고예정일</th><th>파렛트유형</th><th>발주수량</th><th>매칭완료</th><th>부족수량</th><th>진행률</th><th>입고예약</th><th>진행상태</th><th>생산경고</th></tr></thead>
+        <tbody>
+        ${shownOrderRows.length? shownOrderRows.map(r=>`
+          <tr>
+            <td>${esc(r.o.order_no)}</td>
+            <td>${esc(destinationName(r.o.destination_id))}</td>
+            <td>${fmtDateDisp(r.o.planned_ship_date)}</td>
+            <td>${esc(productName(r.o.product_id))}</td>
+            <td>${r.o.planned_pallet_count}</td>
+            <td>${r.matched}</td>
+            <td>${r.shortage>0?`<b style="color:var(--red)">${r.shortage}</b>`:'0'}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="flex:1;min-width:60px;height:8px;border-radius:99px;background:#eef0f3;overflow:hidden;">
+                  <div style="height:100%;width:${r.progressPct}%;background:${r.progressPct>=100?'var(--green)':'var(--amber)'};border-radius:99px;"></div>
+                </div>
+                <span style="font-size:12px;color:var(--ink-soft);white-space:nowrap;">${r.progressPct}%</span>
+              </div>
+            </td>
+            <td>${r.resvStatus==='예약완료'?'<span class="badge b-green">예약완료</span>':'<span class="badge b-amber">미완료</span>'}</td>
+            <td>${orderStatusBadge(r.status)}</td>
+            <td>${r.atRisk?'<span class="badge b-red">⚠ 생산부족</span>':''}</td>
+          </tr>`).join('') : `<tr><td colspan="11" class="empty-row">표시할 발주가 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>주간 캘린더 (월~일, KST)</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-ghost btn-sm" onclick="DASH_WEEK_OFFSET--; switchTab('dashboard')">‹</button>
+          <b style="font-size:13px;">${fmtDateDisp(calWeekStart)} ~ ${fmtDateDisp(addDaysISO(calWeekStart,6))}</b>
+          <button class="btn btn-ghost btn-sm" onclick="DASH_WEEK_OFFSET++; switchTab('dashboard')">›</button>
+          ${DASH_WEEK_OFFSET!==0?`<button class="btn btn-ghost btn-sm" onclick="DASH_WEEK_OFFSET=0; switchTab('dashboard')">오늘로</button>`:''}
+        </div>
+      </div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th style="width:90px;"></th>${weekDays.map(d=>`<th style="${d.isToday?'color:var(--blue);':''}">${d.name} ${fmtDateDisp(d.date).slice(5)}${d.isToday?' (오늘)':''}</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:700;">생산계획</td>
+            ${weekDays.map(d=>`<td>${d.planQty>0?`<div><b>${d.planQty} 파렛트</b></div><span class="badge b-blue">생산예정</span>`:`<span class="badge b-navy">생산없음</span>`}</td>`).join('')}
+          </tr>
+          <tr>
+            <td style="font-weight:700;">출고예정</td>
+            ${weekDays.map(d=>`<td>${d.orderQty>0?`
+              <div><b>${d.orderQty} 파렛트</b></div>
+              <span class="badge b-green">출고예정</span>
+              <div style="margin-top:6px;font-size:12px;color:var(--ink-soft);text-align:left;">
+                ${d.destBreakdown.map(x=>`${esc(x.name)}: ${x.qty}`).join('<br>')}
+              </div>
+              `:`<span class="badge b-navy">출고없음</span>`}</td>`).join('')}
+          </tr>
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+</script>
+<script>
+/* ============================================================
+   발주관리
+   ============================================================ */
+let ORDER_FILTERS = { periodMode:'month', from: todayKST().slice(0,7)+'-01', to: lastDayOfMonthISO(todayKST().slice(0,7)), q:'' };
+let ORDER_VIEW = 'progress';
+
+async function renderOrders(){
+  const [orders, pallets, profileNames] = await Promise.all([
+    loadOrdersFull(ORDER_FILTERS.from||null, ORDER_FILTERS.to||null),
+    loadPalletsFull({}),
+    loadProfileNameMap(),
+  ]);
+  STATE.cache.orders = orders;
+  const canManage = can('admin','shipping_manager');
+  const canConfirm = can('admin','production_manager');
+
+  let rows = orders.map(o=>({ o, fulfill: o.status==='취소' ? null : orderStatusOf(o, pallets) }));
+  if(ORDER_FILTERS.q){
+    const q = ORDER_FILTERS.q.toLowerCase();
+    rows = rows.filter(r=>(r.o.order_no||'').toLowerCase().includes(q));
+  }
+  const progressRows = rows.filter(r=>r.o.status!=='취소' && r.fulfill!=='출고완료');
+  const doneRows = rows.filter(r=>r.o.status!=='취소' && r.fulfill==='출고완료');
+  const cancelledRows = rows.filter(r=>r.o.status==='취소');
+  const shownRows = (ORDER_VIEW==='done' ? doneRows : ORDER_VIEW==='cancelled' ? cancelledRows : progressRows)
+    .sort((a,b)=> (a.o.planned_ship_date||'') < (b.o.planned_ship_date||'') ? -1 : 1);
+  STATE.cache.orderShownRows = shownRows;
+
+  const groupedByCountry = {};
+  shownRows.forEach(r=>{
+    const key = r.o.country_id || 'none';
+    (groupedByCountry[key] = groupedByCountry[key]||[]).push(r);
+  });
+  const countryKeys = Object.keys(groupedByCountry).sort((a,b)=>
+    countryName(a==='none'?'':a).localeCompare(countryName(b==='none'?'':b)));
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>발주 목록</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ${ORDER_VIEW==='progress'?'btn-primary':'btn-ghost'} btn-sm" onclick="ORDER_VIEW='progress'; switchTab('orders')">발주진행중 (${progressRows.length})</button>
+          <button class="btn ${ORDER_VIEW==='done'?'btn-primary':'btn-ghost'} btn-sm" onclick="ORDER_VIEW='done'; switchTab('orders')">발주완료 (${doneRows.length})</button>
+          <button class="btn ${ORDER_VIEW==='cancelled'?'btn-primary':'btn-ghost'} btn-sm" onclick="ORDER_VIEW='cancelled'; switchTab('orders')">취소 (${cancelledRows.length})</button>
+        </div>
+      </div>
+      <div class="panel-head" style="border-top:1px solid var(--line);">
+        <div class="toolbar">
+          ${periodPickerHtml(ORDER_FILTERS, 'orders', 'ORDER_FILTERS')}
+          <input type="text" placeholder="발주번호 검색" value="${esc(ORDER_FILTERS.q)}" oninput="debouncedOrderSearch(this.value)">
+          <button class="btn btn-ghost btn-sm" onclick="exportOrdersCsv()">CSV 다운로드</button>
+          ${canManage?`<button class="btn btn-primary btn-sm" onclick="openOrderModal()">+ 발주 등록</button>`:''}
+        </div>
+      </div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>발주번호</th><th>납품요청일</th><th>출고예정일</th><th>납품일</th><th>국가</th><th>납품처</th><th>파렛트유형</th><th>파렛트수량</th><th>상태</th><th>발주확인</th><th></th></tr></thead>
+        <tbody>
+        ${countryKeys.length? countryKeys.map(ck=>`
+          <tr style="background:#fafbfc;"><td colspan="11" style="font-weight:700;">${esc(countryName(ck==='none'?'':ck))} (${groupedByCountry[ck].length}건)</td></tr>
+          ${groupedByCountry[ck].map(r=>`
+          <tr>
+            <td>${esc(r.o.order_no)}</td>
+            <td>${fmtDateDisp(r.o.requested_delivery_date)}</td>
+            <td>${fmtDateDisp(r.o.planned_ship_date)}</td>
+            <td>${r.o.actual_delivery_date?fmtDateDisp(r.o.actual_delivery_date):'<span style="color:var(--ink-soft);">-</span>'}</td>
+            <td>${esc(countryName(r.o.country_id))}</td>
+            <td>${esc(destinationName(r.o.destination_id))}</td>
+            <td>${esc(productName(r.o.product_id))}</td>
+            <td>${r.o.planned_pallet_count}</td>
+            <td>${r.o.status==='취소'?'<span class="badge b-red">취소</span>':orderStatusBadge(r.fulfill)}</td>
+            <td>${orderConfirmCell(r.o, profileNames, canConfirm)}</td>
+            <td>${canManage?`<button class="btn btn-ghost btn-sm" onclick="openOrderModal('${r.o.id}')">수정</button>`:''}</td>
+          </tr>`).join('')}
+        `).join('') : `<tr><td colspan="11" class="empty-row">해당하는 발주가 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+function orderConfirmCell(o, profileNames, canConfirm){
+  if(o.status==='취소') return '';
+  if(o.production_confirmed){
+    const who = profileNames[o.production_confirmed_by] || '';
+    const when = o.production_confirmed_at ? fmtDateDisp(o.production_confirmed_at.slice(0,10)) : '';
+    const sub = [who, when].filter(Boolean).join(' · ');
+    const canUnconfirm = can('admin') || (STATE.profile && STATE.profile.id === o.production_confirmed_by);
+    return `<span class="badge b-green" title="${esc(sub)}">확인완료</span>${sub?`<div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">${esc(sub)}</div>`:''}${canUnconfirm?`<div><button class="btn btn-ghost btn-sm" style="margin-top:4px;padding:2px 8px;font-size:11px;" onclick="unconfirmOrder('${o.id}')">확인취소</button></div>`:''}`;
+  }
+  return canConfirm
+    ? `<button class="btn btn-primary btn-sm" onclick="confirmOrder('${o.id}')">발주확인</button>`
+    : '<span class="badge b-amber">미확인</span>';
+}
+async function confirmOrder(orderId){
+  if(!can('admin','production_manager')){ toast('발주확인 권한이 없습니다.','err'); return; }
+  const { error } = await sb.from('costco_orders').update({
+    production_confirmed: true,
+    production_confirmed_by: STATE.profile.id,
+    production_confirmed_at: new Date().toISOString(),
+  }).eq('id', orderId);
+  if(error){ toast(friendlyError(error),'err'); return; }
+  toast('발주확인 처리되었습니다.','ok');
+  switchTab('orders');
+}
+async function unconfirmOrder(orderId){
+  const order = (STATE.cache.orders||[]).find(x=>x.id===orderId);
+  const isOwner = order && STATE.profile && order.production_confirmed_by === STATE.profile.id;
+  if(!can('admin') && !isOwner){ toast('발주확인을 한 담당자 또는 관리자만 취소할 수 있습니다.','err'); return; }
+  if(!confirm('발주확인을 취소하시겠습니까?')) return;
+  const { error } = await sb.from('costco_orders').update({
+    production_confirmed: false,
+    production_confirmed_by: null,
+    production_confirmed_at: null,
+  }).eq('id', orderId);
+  if(error){ toast(friendlyError(error),'err'); return; }
+  toast('발주확인이 취소되었습니다.','ok');
+  switchTab('orders');
+}
+const debouncedOrderSearch = debounce((v)=>{ ORDER_FILTERS.q=v; switchTab('orders'); }, 400);
+function exportOrdersCsv(){
+  const profileNames = STATE.cache.profileNames || {};
+  const rows = (STATE.cache.orderShownRows||[]).map(r=>({
+    발주번호:r.o.order_no, 납품요청일:r.o.requested_delivery_date||'', 출고예정일:r.o.planned_ship_date||'', 납품일:r.o.actual_delivery_date||'',
+    국가:countryName(r.o.country_id), 납품처:destinationName(r.o.destination_id),
+    파렛트유형:productName(r.o.product_id), 파렛트수량:r.o.planned_pallet_count, 상태:r.o.status==='취소'?'취소':(r.fulfill||''),
+    발주확인:r.o.status==='취소'?'':(r.o.production_confirmed?`확인완료(${profileNames[r.o.production_confirmed_by]||''})`:'미확인'),
+  }));
+  csvDownload(`발주목록_${todayKST()}.csv`, rows);
+}
+
+async function openOrderModal(orderId){
+  const existing = orderId ? (STATE.cache.orders||[]).find(x=>x.id===orderId) : null;
+  const body = `
+    <div class="form-grid">
+      <div class="field"><label>발주번호 *</label><input type="text" id="ordNo" value="${esc(existing?.order_no||'')}" placeholder="코스트코 발주번호"></div>
+      <div class="field"><label>납품요청일 *</label><input type="date" id="ordReqDate" value="${existing?.requested_delivery_date||''}"></div>
+      <div class="field"><label>출고예정일 *</label><input type="date" id="ordShipDate" value="${existing?.planned_ship_date||''}"></div>
+      <div class="field"><label>납품일</label><input type="date" id="ordDeliveredDate" value="${existing?.actual_delivery_date||''}"></div>
+      <div class="field"><label>국가 *</label>
+        <select id="ordCountry" onchange="onOrderCountryChange()">${activeCountries().map(c=>`<option value="${c.id}" ${existing&&existing.country_id===c.id?'selected':''}>${esc(c.country_name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>납품처</label>
+        <select id="ordDest">${activeDestinations(existing?existing.country_id:activeCountries()[0]?.id).map(d=>`<option value="${d.id}" ${existing&&existing.destination_id===d.id?'selected':''}>${esc(d.destination_name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>파렛트유형 *</label>
+        <select id="ordProduct">${activeProducts().map(p=>`<option value="${p.id}" ${existing&&existing.product_id===p.id?'selected':''}>${esc(p.product_name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>파렛트수량 *</label><input type="number" min="1" id="ordQty" value="${existing?existing.planned_pallet_count:1}"></div>
+      <div class="field full"><label>비고</label><input type="text" id="ordNotes" value="${esc(existing?.notes||'')}"></div>
+      ${existing?`<div class="field"><label>상태</label>
+        <select id="ordStatus"><option value="등록" ${existing.status==='등록'?'selected':''}>등록</option><option value="취소" ${existing.status==='취소'?'selected':''}>취소</option></select>
+      </div>`:''}
+    </div>`;
+  openModal(orderId?'발주 수정':'발주 등록', body, [
+    { label:'취소', cls:'btn-ghost', onClick: closeModal },
+    { label:'저장', cls:'btn-primary', onClick: ()=>saveOrder(orderId) }
+  ]);
+}
+function onOrderCountryChange(){
+  const countryId = document.getElementById('ordCountry').value;
+  const sel = document.getElementById('ordDest');
+  sel.innerHTML = activeDestinations(countryId).map(d=>`<option value="${d.id}">${esc(d.destination_name)}</option>`).join('');
+}
+async function saveOrder(orderId){
+  const order_no = document.getElementById('ordNo').value.trim();
+  const requested_delivery_date = document.getElementById('ordReqDate').value;
+  const planned_ship_date = document.getElementById('ordShipDate').value;
+  const actual_delivery_date = document.getElementById('ordDeliveredDate').value || null;
+  const qty = parseInt(document.getElementById('ordQty').value)||0;
+  if(!order_no){ toast('발주번호를 입력해 주세요.','err'); return; }
+  if(!requested_delivery_date){ toast('납품요청일을 입력해 주세요.','err'); return; }
+  if(!planned_ship_date){ toast('출고예정일을 입력해 주세요.','err'); return; }
+  if(qty<1){ toast('파렛트수량을 입력해 주세요.','err'); return; }
+  const payload = {
+    order_no, requested_delivery_date, planned_ship_date, actual_delivery_date,
+    country_id: document.getElementById('ordCountry').value,
+    destination_id: document.getElementById('ordDest').value || null,
+    product_id: document.getElementById('ordProduct').value,
+    planned_pallet_count: qty,
+    notes: document.getElementById('ordNotes').value.trim() || null,
+    updated_by: STATE.profile.id,
+  };
+  const statusEl = document.getElementById('ordStatus');
+  if(statusEl) payload.status = statusEl.value;
+  try{
+    if(orderId){
+      const { error } = await sb.from('costco_orders').update(payload).eq('id', orderId);
+      if(error) throw error;
+    }else{
+      payload.created_by = STATE.profile.id;
+      const { error } = await sb.from('costco_orders').insert(payload);
+      if(error) throw error;
+    }
+    closeModal(); toast('발주가 저장되었습니다.','ok'); switchTab('orders');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+</script>
+<script>
+/* ============================================================
+   생산계획
+   ============================================================ */
+let PLAN_FILTERS = { periodMode:'month', from: todayKST().slice(0,7)+'-01', to: lastDayOfMonthISO(todayKST().slice(0,7)), status:'계획중', q:'' };
+let PENDING_ORDER_VIEW = 'unmatched';
+const INFLIGHT_PLAN_IDS = new Set();
+
+async function renderProduction(){
+  const [orders, plans, pallets] = await Promise.all([
+    loadOrdersFull(null, null),
+    loadProductionPlans(PLAN_FILTERS.from||null, PLAN_FILTERS.to||null),
+    loadPalletsFull({}),
+  ]);
+  STATE.cache.orders = orders;
+  STATE.cache.productionPlans = plans;
+  STATE.cache.pallets = pallets;
+  const canManage = can('admin','production_manager');
+
+  // 상단: 미출고 발주 (참고용)
+  const activeOrders = orders.filter(o=>o.status!=='취소');
+  const pendingOrders = activeOrders.filter(o=>orderStatusOf(o, pallets)!=='출고완료');
+  const freeStock = pallets.filter(p=>p.status==='재고보유');
+  const pendingRows = pendingOrders.map(o=>{
+    const cov = orderCoverage(o, pallets);
+    return { o, matched: cov.matched, reserved: cov.reserved, shortage: cov.shortage };
+  }).sort((a,b)=> (a.o.planned_ship_date||'') < (b.o.planned_ship_date||'') ? -1 : 1);
+
+  // 하단: 생산계획 목록
+  let rows = plans;
+  if(PLAN_FILTERS.status) rows = rows.filter(p=>p.status===PLAN_FILTERS.status);
+  if(PLAN_FILTERS.q){
+    const q = PLAN_FILTERS.q.toLowerCase();
+    rows = rows.filter(p=>(p.plan_no||'').toLowerCase().includes(q));
+  }
+  rows.sort((a,b)=> (a.planned_production_date||'') < (b.planned_production_date||'') ? -1 : 1);
+  STATE.cache.planShownRows = rows;
+  const planPalletPreviewMap = await computePalletPreviewMap(plans);
+  const realPalletsByPlan = {};
+  pallets.forEach(pl=>{
+    if(!pl.production_plan_id) return;
+    (realPalletsByPlan[pl.production_plan_id] = realPalletsByPlan[pl.production_plan_id]||[]).push(pl.pallet_no);
+  });
+  Object.keys(realPalletsByPlan).forEach(k=>realPalletsByPlan[k].sort());
+
+  const pendingTotal = {
+    qty: pendingRows.reduce((a,r)=>a+(r.o.planned_pallet_count||0),0),
+    matched: pendingRows.reduce((a,r)=>a+r.matched,0),
+    shortage: pendingRows.reduce((a,r)=>a+r.shortage,0),
+  };
+
+  const unmatchedRows = pendingRows.filter(r=>r.reserved < r.o.planned_pallet_count);
+  const matchedRows = pendingRows.filter(r=>r.reserved >= r.o.planned_pallet_count);
+  const shownRows = PENDING_ORDER_VIEW==='matched' ? matchedRows : unmatchedRows;
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>미출고 발주목록 (참고용)</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ${PENDING_ORDER_VIEW==='unmatched'?'btn-primary':'btn-ghost'} btn-sm" onclick="PENDING_ORDER_VIEW='unmatched'; switchTab('production')">미매칭 (${unmatchedRows.length})</button>
+          <button class="btn ${PENDING_ORDER_VIEW==='matched'?'btn-primary':'btn-ghost'} btn-sm" onclick="PENDING_ORDER_VIEW='matched'; switchTab('production')">매칭완료 (${matchedRows.length})</button>
+        </div>
+      </div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>발주번호</th><th>출고예정일</th><th>국가</th><th>납품처</th><th>파렛트유형</th><th>발주수량</th><th>매칭완료</th><th>부족수량</th></tr></thead>
+        <tbody>
+        ${shownRows.length? shownRows.map(r=>`
+          <tr>
+            <td>${esc(r.o.order_no)}</td>
+            <td>${fmtDateDisp(r.o.planned_ship_date)}</td>
+            <td>${esc(countryName(r.o.country_id))}</td>
+            <td>${esc(destinationName(r.o.destination_id))}</td>
+            <td>${esc(productName(r.o.product_id))}</td>
+            <td>${r.o.planned_pallet_count}</td>
+            <td>${r.matched}</td>
+            <td>${r.shortage>0?`<b style="color:var(--red)">${r.shortage}</b>`:'0'}</td>
+          </tr>`).join('') : `<tr><td colspan="8" class="empty-row">해당하는 발주가 없습니다.</td></tr>`}
+        ${pendingRows.length? `<tr style="font-weight:700;background:#fafbfc;">
+            <td colspan="5">전체 합계</td>
+            <td>${pendingTotal.qty}</td>
+            <td>${pendingTotal.matched}</td>
+            <td>${pendingTotal.shortage>0?`<b style="color:var(--red)">${pendingTotal.shortage}</b>`:'0'}</td>
+          </tr>` : ''}
+        </tbody>
+      </table></div></div>
+
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>생산계획</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ${PLAN_FILTERS.status==='계획중'?'btn-primary':'btn-ghost'} btn-sm" onclick="PLAN_FILTERS.status='계획중'; switchTab('production')">생산대기중</button>
+          <button class="btn ${PLAN_FILTERS.status==='생산완료'?'btn-primary':'btn-ghost'} btn-sm" onclick="PLAN_FILTERS.status='생산완료'; switchTab('production')">생산완료</button>
+        </div>
+      </div>
+      <div class="panel-head" style="border-top:1px solid var(--line);">
+        <div class="toolbar">
+          ${periodPickerHtml(PLAN_FILTERS, 'production', 'PLAN_FILTERS')}
+          <input type="text" placeholder="계획번호 검색" value="${esc(PLAN_FILTERS.q)}" oninput="debouncedPlanSearch(this.value)">
+          <button class="btn btn-ghost btn-sm" onclick="exportPlansCsv()">CSV 다운로드</button>
+          ${can('admin') && PLAN_FILTERS.status==='계획중'?`<button class="btn btn-danger btn-sm" onclick="deleteSelectedPlanUnits()">선택 삭제</button>`:''}
+          ${canManage && PLAN_FILTERS.status==='계획중'?`<button class="btn btn-ghost btn-sm" onclick="confirmSelectedPlanUnits()">선택 생산완료</button>`:''}
+          ${canManage?`<button class="btn btn-primary btn-sm" onclick="openProductionPlanModal()">+ 생산계획 등록</button>`:''}
+        </div>
+      </div>
+      <div class="panel-body" style="padding:12px 14px;">
+        ${(()=>{
+          if(!rows.length) return `<div class="empty-row">등록된 생산계획이 없습니다.</div>`;
+          const byDate = {};
+          rows.forEach(p=>{ const d=p.planned_production_date||'미지정'; (byDate[d]=byDate[d]||[]).push(p); });
+          const dateKeys = Object.keys(byDate).sort((a,b)=> a<b?1:-1);
+          const grandTotalQty = rows.reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+          return `
+          <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">총 ${dateKeys.length}개 날짜 · 계획 ${rows.length}건 · 합계 <b style="color:var(--ink);">${grandTotalQty}</b>파렛트</div>
+          ${dateKeys.map(date=>{
+            const dayPlans = byDate[date];
+            const dayQty = dayPlans.reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+            const doneQty = dayPlans.filter(p=>p.status==='생산완료').reduce((a,p)=>a+(p.planned_pallet_count||0),0);
+            const byCountry = {};
+            dayPlans.forEach(p=>{ const c=countryName(p.country_id); byCountry[c]=(byCountry[c]||0)+(p.planned_pallet_count||0); });
+            const countrySummary = Object.entries(byCountry).map(([n,q])=>`${esc(n)} ${q}`).join(' · ');
+            const rowsHtml = dayPlans.flatMap(p=>{
+              const n = p.planned_pallet_count || 1;
+              const preview = p.status==='생산완료' ? (realPalletsByPlan[p.id] || []) : (planPalletPreviewMap[p.id] || []);
+              return Array.from({length:n}, (_,idx)=>`
+              <tr>
+                ${can('admin')?`<td>${p.status==='계획중'?`<input type="checkbox" class="planUnitChk" value="${p.id}">`:''}</td>`:''}
+                <td>${esc(preview[idx] || p.plan_no)}</td>
+                <td>${esc(p.plan_no)}</td>
+                <td>${esc(countryName(p.country_id))}</td>
+                <td>${esc(productName(p.product_id))}</td>
+                <td>1</td>
+                <td>${esc(p.production_manager||'-')}</td>
+                <td>${planStatusBadge(p.status)}</td>
+                <td>
+                  ${canManage && p.status==='계획중' ? `<button class="btn btn-ghost btn-sm" onclick="openProductionPlanModal('${p.id}')">수정</button>
+                    <button class="btn btn-primary btn-sm" onclick="confirmProductionPlanUnit('${p.id}')">생산완료</button>`:''}
+                  ${can('admin') && p.status==='계획중' ? `<button class="btn btn-danger btn-sm" onclick="deletePlanUnit('${p.id}')">삭제</button>`:''}
+                </td>
+              </tr>`);
+            }).join('');
+            return `
+            <details class="prod-date-group">
+              <summary>
+                <span class="prod-date-label">${date==='미지정'?'날짜 미지정':fmtDateDisp(date)}</span>
+                <span class="prod-date-meta">계획 ${dayPlans.length}건 · 합계 <b>${dayQty}</b>파렛트${doneQty>0?` · 완료 ${doneQty}`:''} · ${countrySummary}</span>
+              </summary>
+              <div class="table-wrap"><table>
+                <thead><tr>${can('admin')?'<th><input type="checkbox" onclick="toggleAllPlanChk(this)"></th>':''}<th>파렛트일련번호</th><th>계획번호</th><th>국가</th><th>파렛트유형</th><th>수량</th><th>생산담당자</th><th>상태</th><th></th></tr></thead>
+                <tbody>${rowsHtml}</tbody>
+              </table></div>
+            </details>`;
+          }).join('')}
+          `;
+        })()}
+      </div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+function deletePlanUnit(planId){
+  confirmModal('이 파렛트 1개 분량을 생산계획에서 삭제하시겠습니까?\n계획 전체가 아니라 1개 수량만 줄어듭니다.', async ()=>{
+    try{
+      const { data: plan, error: pErr } = await sb.from('costco_production_plans').select('planned_pallet_count').eq('id', planId).single();
+      if(pErr) throw pErr;
+      const newCount = (plan.planned_pallet_count||1) - 1;
+      if(newCount<=0){
+        const { error } = await sb.from('costco_production_plans').delete().eq('id', planId);
+        if(error) throw error;
+      }else{
+        const { error } = await sb.from('costco_production_plans').update({ planned_pallet_count:newCount, updated_by:STATE.profile.id }).eq('id', planId);
+        if(error) throw error;
+      }
+      closeModal(); toast('삭제되었습니다.','ok'); switchTab('production');
+    }catch(e){ toast(friendlyError(e),'err'); }
+  }, {danger:true, confirmLabel:'삭제'});
+}
+function toggleAllPlanChk(src){
+  document.querySelectorAll('.planUnitChk').forEach(c=>{ c.checked = src.checked; });
+}
+function deleteSelectedPlanUnits(){
+  const checked = [...document.querySelectorAll('.planUnitChk:checked')].map(c=>c.value);
+  if(!checked.length){ toast('삭제할 항목을 선택해 주세요.','err'); return; }
+  const counts = {};
+  checked.forEach(id=>{ counts[id] = (counts[id]||0) + 1; });
+  confirmModal(`선택한 파렛트 ${checked.length}개 분량을 생산계획에서 삭제하시겠습니까?`, async ()=>{
+    try{
+      for(const planId of Object.keys(counts)){
+        const { data: plan, error: pErr } = await sb.from('costco_production_plans').select('planned_pallet_count').eq('id', planId).single();
+        if(pErr) throw pErr;
+        const newCount = (plan.planned_pallet_count||0) - counts[planId];
+        if(newCount<=0){
+          await sb.from('costco_production_plans').delete().eq('id', planId);
+        }else{
+          await sb.from('costco_production_plans').update({ planned_pallet_count:newCount, updated_by:STATE.profile.id }).eq('id', planId);
+        }
+      }
+      closeModal(); toast('선택한 항목이 삭제되었습니다.','ok'); switchTab('production');
+    }catch(e){ toast(friendlyError(e),'err'); }
+  }, {danger:true, confirmLabel:'선택 삭제'});
+}
+const debouncedPlanSearch = debounce((v)=>{ PLAN_FILTERS.q=v; switchTab('production'); }, 400);
+function exportPlansCsv(){
+  const rows = (STATE.cache.planShownRows||[]).map(p=>({
+    계획번호:p.plan_no, 생산예정일:p.planned_production_date||'', 국가:countryName(p.country_id),
+    파렛트유형:productName(p.product_id), 수량:p.planned_pallet_count, 생산담당자:p.production_manager||'', 상태:p.status
+  }));
+  csvDownload(`생산계획목록_${todayKST()}.csv`, rows);
+}
+
+async function openProductionPlanModal(planId){
+  const existing = planId ? (STATE.cache.productionPlans||[]).find(x=>x.id===planId) : null;
+  const body = `
+    <div class="form-grid">
+      <div class="field"><label>생산예정일 *</label><input type="date" id="plnDate" value="${existing?.planned_production_date||''}"></div>
+      <div class="field"><label>국가 *</label>
+        <select id="plnCountry">${activeCountries().map(c=>`<option value="${c.id}" ${existing&&existing.country_id===c.id?'selected':''}>${esc(c.country_name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>파렛트유형 *</label>
+        <select id="plnProduct">${activeProducts().map(p=>`<option value="${p.id}" ${existing&&existing.product_id===p.id?'selected':''}>${esc(p.product_name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>생산수량(파렛트) *</label><input type="number" min="1" id="plnCount" value="${existing?existing.planned_pallet_count:1}"></div>
+      <div class="field"><label>생산담당자</label><input type="text" id="plnManager" value="${esc(existing?.production_manager||'')}"></div>
+      <div class="field full"><label>비고</label><input type="text" id="plnNotes" value="${esc(existing?.notes||'')}"></div>
+    </div>`;
+  openModal(planId?'생산계획 수정':'생산계획 등록', body, [
+    { label:'취소', cls:'btn-ghost', onClick: closeModal },
+    { label:'저장', cls:'btn-primary', onClick: ()=>saveProductionPlan(planId) }
+  ]);
+}
+async function saveProductionPlan(planId){
+  const qty = parseInt(document.getElementById('plnCount').value)||0;
+  const date = document.getElementById('plnDate').value;
+  if(!date){ toast('생산예정일을 입력해 주세요.','err'); return; }
+  if(qty<1){ toast('생산수량을 입력해 주세요.','err'); return; }
+  const payload = {
+    planned_production_date: date,
+    country_id: document.getElementById('plnCountry').value,
+    product_id: document.getElementById('plnProduct').value,
+    planned_pallet_count: qty,
+    production_manager: document.getElementById('plnManager').value.trim() || null,
+    notes: document.getElementById('plnNotes').value.trim() || null,
+    updated_by: STATE.profile.id,
+  };
+  try{
+    if(planId){
+      const { error } = await sb.from('costco_production_plans').update(payload).eq('id', planId);
+      if(error) throw error;
+    }else{
+      payload.created_by = STATE.profile.id;
+      const { error } = await sb.from('costco_production_plans').insert(payload);
+      if(error) throw error;
+    }
+    closeModal(); toast('생산계획이 저장되었습니다.','ok'); switchTab('production');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+function deleteProductionPlan(planId){
+  confirmModal('이 생산계획을 삭제하시겠습니까?\n이미 이 계획으로 생성된 파렛트가 있으면 삭제할 수 없습니다.', async ()=>{
+    try{
+      const { error } = await sb.from('costco_production_plans').delete().eq('id', planId);
+      if(error) throw error;
+      closeModal(); toast('생산계획이 삭제되었습니다.','ok'); switchTab('production');
+    }catch(e){ toast(friendlyError(e),'err'); }
+  }, {danger:true, confirmLabel:'삭제'});
+}
+
+function confirmProductionPlanUnit(planId){
+  processProductionCompletion({ [planId]: 1 });
+}
+function confirmSelectedPlanUnits(){
+  const checked = [...document.querySelectorAll('.planUnitChk:checked')].map(c=>c.value);
+  if(!checked.length){ toast('생산완료할 항목을 선택해 주세요.','err'); return; }
+  const counts = {};
+  checked.forEach(id=>{ counts[id] = (counts[id]||0) + 1; });
+  processProductionCompletion(counts);
+}
+async function processProductionCompletion(unitCounts){
+  const planIds = Object.keys(unitCounts);
+  if(planIds.some(id=>INFLIGHT_PLAN_IDS.has(id))){ toast('이미 처리 중인 계획이 포함되어 있습니다. 잠시만 기다려 주세요.','err'); return; }
+  planIds.forEach(id=>INFLIGHT_PLAN_IDS.add(id));
+  try{
+    const specs = [];
+    const targetPlanIds = [];
+    for(const planId of planIds){
+      const { data: plan, error: pErr } = await sb.from('costco_production_plans').select('*').eq('id', planId).single();
+      if(pErr) throw pErr;
+      if(plan.status!=='계획중'){ toast(`${plan.plan_no}은(는) 이미 처리되었거나 계획중 상태가 아닙니다.`,'err'); return; }
+      const { data: existing, error: exErr } = await sb.from('costco_pallets').select('id').eq('production_plan_id', planId).is('deleted_at', null);
+      if(exErr) throw exErr;
+      if(existing && existing.length){ toast(`${plan.plan_no}은(는) 이미 생성된 파렛트가 있습니다. 재고관리에서 확인해 주세요.`,'err'); return; }
+
+      const want = Math.min(unitCounts[planId], plan.planned_pallet_count||0);
+      if(want<1) continue;
+      let targetPlan = plan;
+      if(want < plan.planned_pallet_count){
+        // 선택한 수량만큼 새 계획으로 분할
+        const { data: newPlan, error: nErr } = await sb.from('costco_production_plans').insert({
+          planned_production_date: plan.planned_production_date,
+          country_id: plan.country_id,
+          product_id: plan.product_id,
+          planned_pallet_count: want,
+          production_manager: plan.production_manager,
+          notes: plan.notes,
+          status: '계획중',
+          created_by: STATE.profile.id,
+        }).select().single();
+        if(nErr) throw nErr;
+        const { error: uErr } = await sb.from('costco_production_plans').update({
+          planned_pallet_count: plan.planned_pallet_count - want, updated_by: STATE.profile.id
+        }).eq('id', plan.id);
+        if(uErr) throw uErr;
+        targetPlan = newPlan;
+      }
+      const product = STATE.products.find(x=>x.id===targetPlan.product_id);
+      const qty = product?.default_pallet_quantity;
+      if(!qty){
+        toast(`"${product?product.product_name:'이 파렛트유형'}"에 기본 파렛트 수량이 설정되어 있지 않습니다. 기준정보 > 파렛트유형에서 먼저 설정해 주세요.`,'err');
+        await switchTab('master'); MASTER_VIEW='products'; await renderMaster();
+        return;
+      }
+      const palletNos = await palletNumbersForBatch(targetPlan);
+      palletNos.forEach(no=>{
+        specs.push({
+          pallet_no: no, production_plan_id: targetPlan.id, country_id: targetPlan.country_id, product_id: targetPlan.product_id,
+          actual_quantity: qty, production_date: targetPlan.planned_production_date, created_by: STATE.profile.id,
+        });
+      });
+      targetPlanIds.push(targetPlan.id);
+    }
+    if(!specs.length){ toast('생산완료할 수량이 없습니다.','err'); return; }
+    openPalletCreationModal(specs, targetPlanIds);
+  }catch(e){ toast(friendlyError(e),'err'); }
+  finally{ planIds.forEach(id=>INFLIGHT_PLAN_IDS.delete(id)); }
+}
+
+/* ---------- 파렛트 생성 + 일련번호 일괄입력 (전체저장 시에만 실제 생성) ---------- */
+let PALLET_CREATE_SPECS = null;
+let PALLET_CREATE_PLAN_IDS = null;
+let PALLET_CREATE_DATA = null;
+
+function openPalletCreationModal(specs, planIds){
+  PALLET_CREATE_SPECS = specs;
+  PALLET_CREATE_PLAN_IDS = Array.isArray(planIds) ? planIds : (planIds ? [planIds] : []);
+  PALLET_CREATE_DATA = specs.map(sp=>({ pallet_no: sp.pallet_no, actual_quantity: sp.actual_quantity, lots: [] }));
+  const body = `<p class="helper-text" style="margin-bottom:10px;">모든 파렛트의 일련번호를 입력하고 저장해야 파렛트가 생성되며 해당 계획이 "생산완료"로 확정됩니다.</p><div id="palletCreateBox"></div>`;
+  openModal(`일련번호 입력 (${PALLET_CREATE_DATA.length}개 파렛트)`, body, [
+    { label:'닫기', cls:'btn-ghost', onClick: ()=>{ PALLET_CREATE_SPECS=null; PALLET_CREATE_PLAN_IDS=null; closeModal(); switchTab('production'); } },
+    { label:'전체 저장', cls:'btn-primary', onClick: savePalletCreation }
+  ], true, true);
+  renderPalletCreateBox();
+}
+function renderPalletCreateBox(){
+  const box = document.getElementById('palletCreateBox');
+  if(!box) return;
+  box.innerHTML = PALLET_CREATE_DATA.map((p, pIdx)=>{
+    const visible = p.lots.map((l,idx)=>({l,idx})).filter(x=>!x.l._deleted);
+    const sum = visible.reduce((a,x)=>a+(parseInt(x.l.quantity)||0),0);
+    const ok = sum === p.actual_quantity;
+    return `
+      <div class="item-row-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <b>${esc(p.pallet_no)} <span class="helper-text">· 파렛트 수량 ${p.actual_quantity}</span></b>
+          <button class="btn btn-ghost btn-sm" onclick="addPalletCreateLotRow(${pIdx})">+ 일련번호 추가</button>
+        </div>
+        ${visible.length? visible.map(({l,idx})=>`
+          <div class="lot-row">
+            <input type="text" placeholder="일련번호" value="${esc(l.serial_no)}" onchange="updatePalletCreateLotRow(${pIdx},${idx},'serial_no',this.value)">
+            <input type="number" min="0" placeholder="수량" value="${l.quantity}" onchange="updatePalletCreateLotRow(${pIdx},${idx},'quantity',parseInt(this.value)||0)">
+            <button class="btn btn-danger btn-sm" onclick="removePalletCreateLotRow(${pIdx},${idx})">삭제</button>
+          </div>`).join('') : `<div class="helper-text">등록된 일련번호가 없습니다.</div>`}
+        <div class="lot-sum">합계: <b style="color:${ok?'var(--green)':'var(--red)'}">${sum}</b> / 파렛트 수량: <b>${p.actual_quantity}</b> ${ok?'✅ 일치':'⚠️ 불일치'}</div>
+      </div>`;
+  }).join('');
+}
+function addPalletCreateLotRow(pIdx){
+  PALLET_CREATE_DATA[pIdx].lots.push({serial_no:'', quantity:0, _deleted:false});
+  renderPalletCreateBox();
+}
+function updatePalletCreateLotRow(pIdx, idx, field, value){
+  PALLET_CREATE_DATA[pIdx].lots[idx][field] = value;
+  renderPalletCreateBox();
+}
+function removePalletCreateLotRow(pIdx, idx){
+  PALLET_CREATE_DATA[pIdx].lots.splice(idx,1);
+  renderPalletCreateBox();
+}
+async function savePalletCreation(){
+  for(const p of PALLET_CREATE_DATA){
+    const visible = p.lots.filter(l=>!l._deleted);
+    const sum = visible.reduce((a,l)=>a+(parseInt(l.quantity)||0),0);
+    if(!visible.length || sum !== p.actual_quantity){
+      toast(`${p.pallet_no}의 일련번호 수량 합계(${sum})가 파렛트 수량(${p.actual_quantity})과 일치하지 않습니다.`,'err');
+      return;
+    }
+  }
+  try{
+    const insertRows = PALLET_CREATE_SPECS.map(sp=>({ ...sp, status:'재고보유' }));
+    const { data: inserted, error } = await sb.from('costco_pallets').insert(insertRows).select('id, pallet_no');
+    if(error) throw error;
+    const idByNo = {};
+    (inserted||[]).forEach(r=>{ idByNo[r.pallet_no] = r.id; });
+    for(const p of PALLET_CREATE_DATA){
+      const pid = idByNo[p.pallet_no];
+      if(!pid) continue;
+      for(const l of p.lots){
+        if(l._deleted || !l.serial_no) continue;
+        const { error: lotErr } = await sb.from('costco_pallet_lots').insert({
+          pallet_id: pid, serial_no: l.serial_no, quantity: l.quantity||0, created_by: STATE.profile.id,
+        });
+        if(lotErr) throw lotErr;
+      }
+      const expDates = [...new Set(p.lots.filter(l=>!l._deleted && l.serial_no).map(l=>computeExpirationFromSerial(l.serial_no)).filter(Boolean))].sort();
+      if(expDates[0]){
+        await sb.from('costco_pallets').update({expiration_date: expDates[0]}).eq('id', pid);
+      }
+    }
+    if(PALLET_CREATE_PLAN_IDS && PALLET_CREATE_PLAN_IDS.length){
+      const { error: planErr } = await sb.from('costco_production_plans').update({
+        status:'생산완료', confirmed_at:new Date().toISOString(), confirmed_by:STATE.profile.id, updated_by:STATE.profile.id
+      }).in('id', PALLET_CREATE_PLAN_IDS);
+      if(planErr) throw planErr;
+    }
+    PALLET_CREATE_SPECS = null; PALLET_CREATE_PLAN_IDS = null;
+    closeModal();
+    toast('파렛트가 생성되고 일련번호 입력이 완료되어 생산완료로 확정되었습니다.','ok');
+
+    const producedKeys = new Set(insertRows.map(sp=>sp.product_id+'|'+sp.country_id));
+    const { data: openOrders } = await sb.from('costco_orders').select('id, product_id, country_id, planned_pallet_count').neq('status','취소');
+    const { data: allPallets } = await sb.from('costco_pallets').select('order_id, status').is('deleted_at', null);
+    const hasMatchable = (openOrders||[]).some(o=>{
+      if(!producedKeys.has(o.product_id+'|'+o.country_id)) return false;
+      const linked = (allPallets||[]).filter(p=>p.order_id===o.id && p.status!=='취소');
+      const reserved = linked.filter(p=>p.status==='매칭완료'||p.status==='출고완료').length;
+      return reserved < (o.planned_pallet_count||0);
+    });
+    await switchTab('inventory');
+    if(hasMatchable){
+      confirmModal('매칭 할 발주건이 있습니다. 출고관리로 이동하시겠습니까?', async ()=>{
+        closeModal(); switchTab('dispatch');
+      });
+    }
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+</script>
+<script>
+/* ============================================================
+   재고관리
+   ============================================================ */
+let INV_FILTERS = { status:'재고보유', productId:'', countryId:'', q:'' };
+
+async function renderInventory(){
+  const pallets = await loadPalletsFull({});
+  STATE.cache.pallets = pallets;
+  const canManage = can('admin','production_manager');
+
+  const freeStock = pallets.filter(p=>p.status==='재고보유');
+  const stockMap = {};
+  freeStock.forEach(p=>{
+    const key = p.product_id+'|'+p.country_id;
+    if(!stockMap[key]) stockMap[key] = { product_id:p.product_id, country_id:p.country_id, count:0, qty:0 };
+    stockMap[key].count++; stockMap[key].qty += (p.actual_quantity||0);
+  });
+  const stockRows = Object.values(stockMap).sort((a,b)=>productName(a.product_id).localeCompare(productName(b.product_id)));
+
+  let rows = pallets;
+  if(INV_FILTERS.status) rows = rows.filter(p=>p.status===INV_FILTERS.status);
+  if(INV_FILTERS.productId) rows = rows.filter(p=>p.product_id===INV_FILTERS.productId);
+  if(INV_FILTERS.countryId) rows = rows.filter(p=>p.country_id===INV_FILTERS.countryId);
+  if(INV_FILTERS.q){
+    const q = INV_FILTERS.q.toLowerCase();
+    rows = rows.filter(p=>(p.pallet_no||'').toLowerCase().includes(q) ||
+      (p.costco_pallet_lots||[]).some(l=>(l.serial_no||'').toLowerCase().includes(q)));
+  }
+  rows.sort((a,b)=> a.pallet_no < b.pallet_no ? -1 : 1);
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head"><h3>현재 재고 (파렛트유형 × 국가)</h3></div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>파렛트유형</th><th>국가</th><th>재고 파렛트 수</th></tr></thead>
+        <tbody>
+        ${stockRows.length? stockRows.map(r=>`
+          <tr><td>${esc(productName(r.product_id))}</td><td>${esc(countryName(r.country_id))}</td><td><b>${r.count}</b></td></tr>
+        `).join('') : `<tr><td colspan="3" class="empty-row">보유 재고가 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>파렛트별 재고</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn ${INV_FILTERS.status==='재고보유'?'btn-primary':'btn-ghost'} btn-sm" onclick="INV_FILTERS.status='재고보유'; switchTab('inventory')">여유재고</button>
+          <button class="btn ${INV_FILTERS.status==='매칭완료'?'btn-primary':'btn-ghost'} btn-sm" onclick="INV_FILTERS.status='매칭완료'; switchTab('inventory')">매칭완료</button>
+          <button class="btn ${INV_FILTERS.status==='출고완료'?'btn-primary':'btn-ghost'} btn-sm" onclick="INV_FILTERS.status='출고완료'; switchTab('inventory')">출고완료</button>
+          <button class="btn ${INV_FILTERS.status===''?'btn-primary':'btn-ghost'} btn-sm" onclick="INV_FILTERS.status=''; switchTab('inventory')">전체</button>
+        </div>
+      </div>
+      <div class="panel-head" style="border-top:1px solid var(--line);">
+        <div class="toolbar">
+          <select onchange="INV_FILTERS.productId=this.value; switchTab('inventory')">
+            <option value="">전체 파렛트유형</option>
+            ${activeProducts().map(p=>`<option value="${p.id}" ${INV_FILTERS.productId===p.id?'selected':''}>${esc(p.product_name)}</option>`).join('')}
+          </select>
+          <select onchange="INV_FILTERS.countryId=this.value; switchTab('inventory')">
+            <option value="">전체 국가</option>
+            ${activeCountries().map(c=>`<option value="${c.id}" ${INV_FILTERS.countryId===c.id?'selected':''}>${esc(c.country_name)}</option>`).join('')}
+          </select>
+          <input type="text" placeholder="파렛트일련번호/LOT일련번호 검색" value="${esc(INV_FILTERS.q)}" oninput="debouncedInvSearch(this.value)">
+          <button class="btn btn-ghost btn-sm" onclick="exportInventoryCsv()">CSV 다운로드</button>
+        </div>
+      </div>
+      <div class="panel-body" style="padding:12px 14px;">
+        ${(()=>{
+          if(!rows.length) return `<div class="empty-row">조건에 맞는 파렛트가 없습니다.</div>`;
+          const byDate = {};
+          rows.forEach(p=>{ const d=p.production_date||'미지정'; (byDate[d]=byDate[d]||[]).push(p); });
+          const dateKeys = Object.keys(byDate).sort((a,b)=> a<b?1:-1);
+          return `
+          <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">총 ${dateKeys.length}개 날짜 · 파렛트 ${rows.length}개</div>
+          ${dateKeys.map(date=>{
+            const dayPallets = byDate[date];
+            const byCountry = {};
+            dayPallets.forEach(p=>{ const c=countryName(p.country_id); byCountry[c]=(byCountry[c]||0)+1; });
+            const countrySummary = Object.entries(byCountry).map(([n,q])=>`${esc(n)} ${q}`).join(' · ');
+            const rowsHtml = dayPallets.map(p=>`
+              <tr>
+                <td>${esc(p.pallet_no)}</td>
+                <td>${esc(productName(p.product_id))}</td>
+                <td>${esc(countryName(p.country_id))}</td>
+                <td>${palletExpirationDisplay(p)}</td>
+                <td>${(p.costco_pallet_lots||[]).length}</td>
+                <td>${palletStatusBadge2(p.status)}</td>
+                <td>${canManage?`<button class="btn btn-ghost btn-sm" onclick="openInventoryPalletModal('${p.id}')">수정</button>`:''}</td>
+              </tr>`).join('');
+            return `
+            <details class="prod-date-group">
+              <summary>
+                <span class="prod-date-label">${date==='미지정'?'생산일 미지정':fmtDateDisp(date)}</span>
+                <span class="prod-date-meta">파렛트 <b>${dayPallets.length}</b>개 · ${countrySummary}</span>
+              </summary>
+              <div class="table-wrap"><table>
+                <thead><tr><th>파렛트일련번호</th><th>파렛트유형</th><th>국가</th><th>소비기한</th><th>LOT수</th><th>상태</th><th></th></tr></thead>
+                <tbody>${rowsHtml}</tbody>
+              </table></div>
+            </details>`;
+          }).join('')}
+          `;
+        })()}
+      </div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+const debouncedInvSearch = debounce((v)=>{ INV_FILTERS.q=v; switchTab('inventory'); }, 400);
+function exportInventoryCsv(){
+  const rows = (STATE.cache.pallets||[]).map(p=>({
+    파렛트일련번호:p.pallet_no, 파렛트유형:productName(p.product_id), 국가:countryName(p.country_id),
+    수량:p.actual_quantity, 생산일:p.production_date||'', 소비기한:palletExpirationDisplay(p),
+    LOT수:(p.costco_pallet_lots||[]).length, 상태:p.status
+  }));
+  csvDownload(`재고목록_${todayKST()}.csv`, rows);
+}
+
+async function openInventoryPalletModal(palletId){
+  const { data: p, error } = await sb.from('costco_pallets').select('*, costco_pallet_lots(*)').eq('id', palletId).single();
+  if(error){ toast(friendlyError(error),'err'); return; }
+  INV_LOT_ROWS = (p.costco_pallet_lots||[]).map(l=>({...l, _deleted:false}));
+  const body = `
+    <div class="form-grid">
+      <div class="field"><label>파렛트일련번호</label><input type="text" value="${esc(p.pallet_no)}" disabled></div>
+      <div class="field"><label>파렛트유형</label><input type="text" value="${esc(productName(p.product_id))}" disabled></div>
+      <div class="field"><label>수량 *</label><input type="number" min="0" id="ivQty" value="${p.actual_quantity}"></div>
+      <div class="field"><label>상태</label>
+        <select id="ivStatus">
+          <option value="재고보유" ${p.status==='재고보유'?'selected':''}>재고보유</option>
+          <option value="매칭완료" ${p.status==='매칭완료'?'selected':''} ${p.status!=='매칭완료'?'disabled':''}>매칭완료 (출고관리에서 변경)</option>
+          <option value="출고완료" ${p.status==='출고완료'?'selected':''} ${p.status!=='출고완료'?'disabled':''}>출고완료 (출고관리에서 변경)</option>
+          <option value="품질보류" ${p.status==='품질보류'?'selected':''}>품질보류</option>
+          <option value="취소" ${p.status==='취소'?'selected':''}>취소</option>
+        </select>
+      </div>
+      <div class="field"><label>생산일</label><input type="date" id="ivProdDate" value="${p.production_date||''}"></div>
+      <div class="field"><label>소비기한</label><input type="date" id="ivExpDate" value="${p.expiration_date||''}">
+        <div class="helper-text">일련번호가 생산일자(YYYYMMDD)를 담고 있으면 저장 시 자동 계산됩니다.</div>
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:16px 0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <b style="font-size:13.5px;">일련번호</b>
+      <button class="btn btn-ghost btn-sm" onclick="addInvLotRow()">+ 일련번호 추가</button>
+    </div>
+    <div id="ivLotBox"></div>
+    <div class="lot-sum" id="ivLotSum"></div>
+  `;
+  openModal('파렛트 수정', body, [
+    { label:'취소', cls:'btn-ghost', onClick: closeModal },
+    { label:'저장', cls:'btn-primary', onClick: ()=>saveInventoryPallet(palletId) }
+  ], true);
+  renderInvLotRows();
+  document.getElementById('ivQty').addEventListener('input', renderInvLotSum);
+}
+let INV_LOT_ROWS = [];
+function addInvLotRow(){ INV_LOT_ROWS.push({id:null, serial_no:'', quantity:0, _deleted:false}); renderInvLotRows(); }
+function updateInvLotRow(idx, field, value){ INV_LOT_ROWS[idx][field]=value; renderInvLotSum(); }
+function removeInvLotRow(idx){
+  const row = INV_LOT_ROWS[idx];
+  if(row.id) row._deleted = true; else INV_LOT_ROWS.splice(idx,1);
+  renderInvLotRows();
+}
+function renderInvLotRows(){
+  const box = document.getElementById('ivLotBox');
+  const visible = INV_LOT_ROWS.map((r,idx)=>({r,idx})).filter(x=>!x.r._deleted);
+  box.innerHTML = visible.length ? visible.map(({r,idx})=>`
+    <div class="lot-row">
+      <input type="text" placeholder="일련번호" value="${esc(r.serial_no)}" onchange="updateInvLotRow(${idx},'serial_no',this.value)">
+      <input type="number" min="0" placeholder="수량" value="${r.quantity}" onchange="updateInvLotRow(${idx},'quantity',parseInt(this.value)||0)">
+      <button class="btn btn-danger btn-sm" onclick="removeInvLotRow(${idx})">삭제</button>
+    </div>`).join('') : `<div class="helper-text">등록된 일련번호가 없습니다.</div>`;
+  renderInvLotSum();
+}
+function renderInvLotSum(){
+  const box = document.getElementById('ivLotSum');
+  const qty = parseInt(document.getElementById('ivQty')?.value)||0;
+  const sum = INV_LOT_ROWS.filter(r=>!r._deleted).reduce((a,r)=>a+(parseInt(r.quantity)||0),0);
+  if(box) box.innerHTML = `합계: <b style="color:${sum===qty?'var(--green)':'var(--red)'}">${sum}</b> / 파렛트 수량: <b>${qty}</b> ${sum===qty?'✅ 일치':'⚠️ 불일치'}`;
+}
+async function saveInventoryPallet(palletId){
+  const qty = parseInt(document.getElementById('ivQty').value)||0;
+  const status = document.getElementById('ivStatus').value;
+  const visibleLots = INV_LOT_ROWS.filter(r=>!r._deleted);
+  const lotSum = visibleLots.reduce((a,r)=>a+(parseInt(r.quantity)||0),0);
+  if(status!=='취소'){
+    if(!visibleLots.length){ toast('일련번호를 입력해야 저장할 수 있습니다.','err'); return; }
+    if(lotSum !== qty){ toast(`일련번호 수량 합계(${lotSum})가 파렛트 수량(${qty})과 일치해야 저장할 수 있습니다.`,'err'); return; }
+  }
+  const expDates = [...new Set(visibleLots.filter(r=>r.serial_no).map(r=>computeExpirationFromSerial(r.serial_no)).filter(Boolean))].sort();
+  const computedExp = expDates[0] || null;
+  const payload = {
+    actual_quantity: qty,
+    status,
+    production_date: document.getElementById('ivProdDate').value || null,
+    expiration_date: computedExp || document.getElementById('ivExpDate').value || null,
+    updated_by: STATE.profile.id,
+  };
+  try{
+    const { error } = await sb.from('costco_pallets').update(payload).eq('id', palletId);
+    if(error) throw error;
+    for(const r of INV_LOT_ROWS){
+      if(r._deleted && r.id){ await sb.from('costco_pallet_lots').delete().eq('id', r.id); continue; }
+      if(r._deleted) continue;
+      if(r.id){
+        await sb.from('costco_pallet_lots').update({ serial_no:r.serial_no, quantity:r.quantity||0 }).eq('id', r.id);
+      }else{
+        await sb.from('costco_pallet_lots').insert({ pallet_id:palletId, serial_no:r.serial_no, quantity:r.quantity||0, created_by:STATE.profile.id });
+      }
+    }
+    closeModal(); toast('파렛트 정보가 저장되었습니다.','ok'); switchTab('inventory');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+</script>
+<script>
+/* ============================================================
+   출고관리
+   ============================================================ */
+let DISPATCH_FILTERS = { periodMode:'month', from: todayKST().slice(0,7)+'-01', to: lastDayOfMonthISO(todayKST().slice(0,7)), q:'' };
+let DISPATCH_VIEW = 'progress';
+
+async function renderDispatch(){
+  const [orders, pallets] = await Promise.all([ loadOrdersFull(DISPATCH_FILTERS.from||null, DISPATCH_FILTERS.to||null), loadPalletsFull({}) ]);
+  const activeOrders = orders.filter(o=>o.status!=='취소');
+  STATE.cache.orders = orders;
+  STATE.cache.pallets = pallets;
+  const canManage = can('admin','shipping_manager');
+
+  let rows = activeOrders.map(o=>{
+    const linked = pallets.filter(p=>p.order_id===o.id && p.status!=='취소');
+    const matched = linked.filter(p=>p.status==='매칭완료').length;
+    const dispatched = linked.filter(p=>p.status==='출고완료').length;
+    return { o, matched, dispatched, status: orderStatusOf(o, pallets) };
+  });
+  if(DISPATCH_FILTERS.q){
+    const q = DISPATCH_FILTERS.q.toLowerCase();
+    rows = rows.filter(r=>(r.o.order_no||'').toLowerCase().includes(q));
+  }
+  rows.sort((a,b)=> (a.o.planned_ship_date||'') < (b.o.planned_ship_date||'') ? -1 : 1);
+  const progressRows = rows.filter(r=>r.status!=='출고완료');
+  const doneRows = rows.filter(r=>r.status==='출고완료');
+  const shownRows = DISPATCH_VIEW==='done' ? doneRows : progressRows;
+  STATE.cache.dispatchShownRows = shownRows;
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>발주 목록</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ${DISPATCH_VIEW==='progress'?'btn-primary':'btn-ghost'} btn-sm" onclick="DISPATCH_VIEW='progress'; switchTab('dispatch')">진행중 (${progressRows.length})</button>
+          <button class="btn ${DISPATCH_VIEW==='done'?'btn-primary':'btn-ghost'} btn-sm" onclick="DISPATCH_VIEW='done'; switchTab('dispatch')">출고완료 (${doneRows.length})</button>
+        </div>
+      </div>
+      <div class="panel-head" style="border-top:1px solid var(--line);">
+        <div class="toolbar">
+          ${periodPickerHtml(DISPATCH_FILTERS, 'dispatch', 'DISPATCH_FILTERS')}
+          <input type="text" placeholder="발주번호 검색" value="${esc(DISPATCH_FILTERS.q)}" oninput="debouncedDispatchSearch(this.value)">
+          ${canManage?`<button class="btn btn-primary btn-sm" onclick="autoMatchAll()">자동매칭</button>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="exportDispatchCsv()">CSV 다운로드</button>
+        </div>
+      </div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>발주번호</th><th>출고예정일</th><th>파렛트유형</th><th>국가</th><th>납품처</th><th>발주수량</th><th>매칭</th><th>출고완료</th><th>상태</th><th></th></tr></thead>
+        <tbody>
+        ${shownRows.length? shownRows.map(r=>`
+          <tr>
+            <td>${esc(r.o.order_no)}</td>
+            <td>${fmtDateDisp(r.o.planned_ship_date)}</td>
+            <td>${esc(productName(r.o.product_id))}</td>
+            <td>${esc(countryName(r.o.country_id))}</td>
+            <td>${esc(destinationName(r.o.destination_id))}</td>
+            <td>${r.o.planned_pallet_count}</td>
+            <td>${r.matched}</td>
+            <td>${r.dispatched}</td>
+            <td>${orderStatusBadge(r.status)}</td>
+            <td>${canManage?`<button class="btn btn-ghost btn-sm" onclick="openDispatchDetailModal('${r.o.id}','match')">수동매칭</button>
+              <button class="btn btn-ghost btn-sm" onclick="autoMatchOne('${r.o.id}')">자동매칭</button>
+              <button class="btn btn-primary btn-sm" onclick="openDispatchDetailModal('${r.o.id}','dispatch')">출고완료</button>`:''}</td>
+          </tr>`).join('') : `<tr><td colspan="10" class="empty-row">조건에 맞는 발주가 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+const debouncedDispatchSearch = debounce((v)=>{ DISPATCH_FILTERS.q=v; switchTab('dispatch'); }, 400);
+function autoMatchAll(){
+  confirmModal('출고예정일이 빠른 발주부터, 오래된 재고 순으로 자동 매칭하시겠습니까?', async ()=>{
+    try{
+      const [orders, pallets] = await Promise.all([ loadOrdersFull(null, null), loadPalletsFull({}) ]);
+      const activeOrders = orders.filter(o=>o.status!=='취소');
+      const pendingOrders = activeOrders
+        .filter(o=>orderStatusOf(o, pallets)!=='출고완료' && orderStatusOf(o, pallets)!=='출고대기')
+        .sort((a,b)=> (a.planned_ship_date||'') < (b.planned_ship_date||'') ? -1 : 1);
+
+      const freePool = pallets.filter(p=>p.status==='재고보유')
+        .sort((a,b)=> (a.production_date||a.created_at||'') < (b.production_date||b.created_at||'') ? -1 : 1);
+
+      const updates = [];
+      let matchedOrderCount = 0;
+      for(const o of pendingOrders){
+        const cov = orderCoverage(o, pallets);
+        let remain = (o.planned_pallet_count||0) - cov.reserved;
+        if(remain<=0) continue;
+        const take = [];
+        for(let i=0;i<freePool.length && remain>0;i++){
+          const p = freePool[i];
+          if(p._taken) continue;
+          if(p.product_id===o.product_id && p.country_id===o.country_id){
+            p._taken = true;
+            take.push(p.id);
+            remain--;
+          }
+        }
+        if(take.length){
+          updates.push({ orderId: o.id, palletIds: take });
+          matchedOrderCount++;
+        }
+      }
+      if(!updates.length){ closeModal(); toast('매칭할 수 있는 발주나 재고가 없습니다.','err'); return; }
+
+      let totalMatched = 0;
+      for(const u of updates){
+        const { error } = await sb.from('costco_pallets').update({ order_id:u.orderId, status:'매칭완료', updated_by:STATE.profile.id }).in('id', u.palletIds);
+        if(error) throw error;
+        totalMatched += u.palletIds.length;
+      }
+      closeModal(); toast(`발주 ${matchedOrderCount}건에 파렛트 ${totalMatched}개를 자동 매칭했습니다.`,'ok'); switchTab('dispatch');
+    }catch(e){ toast(friendlyError(e),'err'); }
+  });
+}
+async function autoMatchOne(orderId){
+  try{
+    const [orders, pallets] = await Promise.all([ loadOrdersFull(null, null), loadPalletsFull({}) ]);
+    const o = orders.find(x=>x.id===orderId);
+    if(!o){ toast('발주를 찾을 수 없습니다.','err'); return; }
+    const cov = orderCoverage(o, pallets);
+    let remain = (o.planned_pallet_count||0) - cov.reserved;
+    if(remain<=0){ toast('이미 매칭이 완료된 발주입니다.','err'); return; }
+    const freePool = pallets.filter(p=>p.status==='재고보유' && p.product_id===o.product_id && p.country_id===o.country_id)
+      .sort((a,b)=> (a.production_date||a.created_at||'') < (b.production_date||b.created_at||'') ? -1 : 1);
+    const take = freePool.slice(0, remain).map(p=>p.id);
+    if(!take.length){ toast('매칭 가능한 재고가 없습니다.','err'); return; }
+    const { error } = await sb.from('costco_pallets').update({ order_id:orderId, status:'매칭완료', updated_by:STATE.profile.id }).in('id', take);
+    if(error) throw error;
+    toast(`파렛트 ${take.length}개를 자동 매칭했습니다.`,'ok'); switchTab('dispatch');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+function exportDispatchCsv(){
+  const rows = (STATE.cache.dispatchShownRows||[]).map(r=>({
+    발주번호:r.o.order_no, 출고예정일:r.o.planned_ship_date||'', 파렛트유형:productName(r.o.product_id),
+    국가:countryName(r.o.country_id), 납품처:destinationName(r.o.destination_id),
+    발주수량:r.o.planned_pallet_count, 매칭:r.matched, 출고완료:r.dispatched, 상태:r.status
+  }));
+  csvDownload(`출고관리목록_${todayKST()}.csv`, rows);
+}
+
+async function openDispatchDetailModal(orderId, mode){
+  mode = mode || 'match';
+  const o = (STATE.cache.orders||[]).find(x=>x.id===orderId);
+  const { data: pallets, error } = await sb.from('costco_pallets').select('*, costco_pallet_lots(*)').is('deleted_at', null);
+  if(error){ toast(friendlyError(error),'err'); return; }
+  const matched = pallets.filter(p=>p.order_id===orderId && p.status==='매칭완료');
+  const dispatched = pallets.filter(p=>p.order_id===orderId && p.status==='출고완료');
+  const available = pallets.filter(p=>p.status==='재고보유' && p.product_id===o.product_id && p.country_id===o.country_id);
+  let resvStatus = '미완료';
+  if(mode==='dispatch'){
+    const { data: resv } = await sb.from('costco_warehouse_reservations').select('reservation_status').eq('order_no', o.order_no).maybeSingle();
+    resvStatus = resv ? resv.reservation_status : '미완료';
+  }
+
+  const body = `
+    <p class="helper-text" style="margin-bottom:10px;">
+      ${esc(o.order_no)} · ${esc(productName(o.product_id))} · ${esc(countryName(o.country_id))} · 발주수량 ${o.planned_pallet_count} · 매칭 ${matched.length} · 출고완료 ${dispatched.length}
+    </p>
+    ${mode==='dispatch' ? `
+    <p style="margin-bottom:14px;">입고예약 상태: ${resvStatus==='예약완료'?'<span class="badge b-green">예약완료</span>':'<span class="badge b-amber">미완료 - 출고완료 처리 불가</span>'}</p>
+    `:''}
+    ${mode==='dispatch' && dispatched.length? `
+    <b style="font-size:13.5px;">출고완료된 파렛트</b>
+    <div style="margin:6px 0 6px;">
+      ${dispatched.map(p=>`
+        <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f1f2f4;font-size:13px;">
+          <input type="checkbox" class="dispatchedChk" value="${p.id}">
+          <span>${esc(p.pallet_no)} · 생산일 ${fmtDateDisp(p.production_date)} · 소비기한 ${palletExpirationDisplay(p)} · LOT ${(p.costco_pallet_lots||[]).length}개</span>
+        </label>`).join('')}
+    </div>
+    <button class="btn btn-danger btn-sm" style="margin-bottom:14px;" onclick="doCancelDispatchSelected('${orderId}')">선택 출고취소</button>
+    `:''}
+    <b style="font-size:13.5px;">매칭된 파렛트 ${mode==='dispatch'?'(출고 대상)':'(출고 대기)'}</b>
+    <div style="margin:6px 0 14px;">
+      ${matched.length? matched.map(p=>`
+        <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f1f2f4;font-size:13px;">
+          <input type="checkbox" class="unmatchChk" value="${p.id}">
+          <span>${esc(p.pallet_no)} · 생산일 ${fmtDateDisp(p.production_date)} · 소비기한 ${palletExpirationDisplay(p)} · LOT ${(p.costco_pallet_lots||[]).length}개</span>
+        </label>`).join('') : `<div class="helper-text">매칭된 파렛트가 없습니다.</div>`}
+      ${mode==='match' && matched.length?`<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="doUnmatchSelected('${orderId}')">선택 매칭해제</button>`:''}
+    </div>
+    ${mode==='match' ? `
+    <b style="font-size:13.5px;">매칭 가능 재고 (같은 파렛트유형·국가)</b>
+    <div style="margin:6px 0 10px;">
+      ${available.length? available.map(p=>`
+        <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f1f2f4;font-size:13px;">
+          <input type="checkbox" class="matchChk" value="${p.id}">
+          <span>${esc(p.pallet_no)} · 생산일 ${fmtDateDisp(p.production_date)} · 소비기한 ${palletExpirationDisplay(p)} · LOT ${(p.costco_pallet_lots||[]).length}개</span>
+        </label>`).join('') : `<div class="helper-text">매칭 가능한 재고가 없습니다.</div>`}
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="doMatchSelected('${orderId}')">선택 매칭</button>
+    ` : `
+    <hr style="border:none;border-top:1px solid var(--line);margin:16px 0;">
+    <div class="form-grid">
+      <div class="field"><label>실제 출고일</label><input type="date" id="dspShipDate" value="${todayKST()}"></div>
+      <div class="field"><label>출고 담당자</label><input type="text" id="dspManager" value="${esc(STATE.profile.name||'')}"></div>
+    </div>
+    `}
+  `;
+  const buttons = mode==='match'
+    ? [{ label:'닫기', cls:'btn-ghost', onClick: ()=>{ closeModal(); switchTab('dispatch'); } }]
+    : [
+        { label:'닫기', cls:'btn-ghost', onClick: ()=>{ closeModal(); switchTab('dispatch'); } },
+        { label:'출고완료 처리', cls:'btn-primary', onClick: ()=>doCompleteDispatch(orderId) }
+      ];
+  openModal(`${mode==='match'?'매칭 처리':'출고완료 처리'} - ${o.order_no}`, body, buttons, true);
+}
+async function doMatchSelected(orderId){
+  const ids = [...document.querySelectorAll('.matchChk:checked')].map(c=>c.value);
+  if(!ids.length){ toast('매칭할 재고를 선택해 주세요.','err'); return; }
+  try{
+    const { error } = await sb.from('costco_pallets').update({ order_id: orderId, status:'매칭완료', updated_by:STATE.profile.id }).in('id', ids);
+    if(error) throw error;
+    toast(`${ids.length}개 파렛트를 매칭했습니다.`,'ok');
+    closeModal(); await openDispatchDetailModal(orderId);
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+async function doUnmatchSelected(orderId){
+  const ids = [...document.querySelectorAll('.unmatchChk:checked')].map(c=>c.value);
+  if(!ids.length){ toast('매칭해제할 파렛트를 선택해 주세요.','err'); return; }
+  try{
+    const { error } = await sb.from('costco_pallets').update({ order_id: null, status:'재고보유', updated_by:STATE.profile.id }).in('id', ids);
+    if(error) throw error;
+    toast(`${ids.length}개 파렛트 매칭을 해제했습니다.`,'ok');
+    closeModal(); await openDispatchDetailModal(orderId);
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+function doCancelDispatchSelected(orderId){
+  const ids = [...document.querySelectorAll('.dispatchedChk:checked')].map(c=>c.value);
+  if(!ids.length){ toast('출고취소할 파렛트를 선택해 주세요.','err'); return; }
+  confirmModal(`선택한 파렛트 ${ids.length}개를 출고취소 하시겠습니까?\n"매칭완료" 상태로 되돌아가며, 다시 출고완료 처리할 수 있습니다.`, async ()=>{
+    try{
+      const { data: links, error: lErr } = await sb.from('costco_dispatch_pallets').select('id, dispatch_id, pallet_id').in('pallet_id', ids);
+      if(lErr) throw lErr;
+      const dispatchIds = [...new Set((links||[]).map(l=>l.dispatch_id))];
+      const linkIds = (links||[]).map(l=>l.id);
+      if(linkIds.length){
+        const { error: delErr } = await sb.from('costco_dispatch_pallets').delete().in('id', linkIds);
+        if(delErr) throw delErr;
+      }
+      const { error: updErr } = await sb.from('costco_pallets').update({ status:'매칭완료', updated_by:STATE.profile.id }).in('id', ids);
+      if(updErr) throw updErr;
+      // 남은 연결이 없는 출고 기록은 취소 처리
+      for(const dispId of dispatchIds){
+        const { data: remaining } = await sb.from('costco_dispatch_pallets').select('id').eq('dispatch_id', dispId);
+        if(!remaining || !remaining.length){
+          await sb.from('costco_dispatches').update({ cancelled_at: new Date().toISOString(), cancellation_reason:'파렛트 출고취소' }).eq('id', dispId);
+        }
+      }
+      closeModal(); toast(`${ids.length}개 파렛트를 출고취소했습니다.`,'ok');
+      await openDispatchDetailModal(orderId, 'dispatch');
+    }catch(e){ toast(friendlyError(e),'err'); }
+  }, {danger:true, confirmLabel:'출고취소'});
+}
+async function doCompleteDispatch(orderId){
+  const o = (STATE.cache.orders||[]).find(x=>x.id===orderId);
+  const actual_ship_date = document.getElementById('dspShipDate').value;
+  if(!actual_ship_date){ toast('실제 출고일을 입력해 주세요.','err'); return; }
+  try{
+    const { data: resv, error: rErr } = await sb.from('costco_warehouse_reservations').select('reservation_status').eq('order_no', o.order_no).maybeSingle();
+    if(rErr) throw rErr;
+    if(!resv || resv.reservation_status!=='예약완료'){
+      toast('입고예약이 완료되지 않아 출고완료 처리할 수 없습니다. 입고예약관리에서 먼저 예약완료로 변경해 주세요.','err');
+      return;
+    }
+    const { data: matched, error: mErr } = await sb.from('costco_pallets').select('id').eq('order_id', orderId).eq('status','매칭완료');
+    if(mErr) throw mErr;
+    if(!matched || !matched.length){ toast('매칭된 파렛트가 없어 출고완료 처리할 수 없습니다.','err'); return; }
+    const { data: disp, error } = await sb.from('costco_dispatches').insert({
+      order_id: orderId, actual_ship_date,
+      shipping_manager: document.getElementById('dspManager').value.trim()||null,
+      created_by: STATE.profile.id,
+    }).select().single();
+    if(error) throw error;
+    const links = matched.map(p=>({ dispatch_id: disp.id, pallet_id: p.id }));
+    const { error: linkErr } = await sb.from('costco_dispatch_pallets').insert(links);
+    if(linkErr) throw linkErr;
+    const { error: updErr } = await sb.from('costco_pallets').update({ status:'출고완료', updated_by:STATE.profile.id }).in('id', matched.map(p=>p.id));
+    if(updErr) throw updErr;
+    closeModal(); toast('출고완료 처리되었습니다.','ok'); switchTab('dispatch');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+</script>
+<script>
+/* ============================================================
+   입고예약관리
+   ============================================================ */
+async function renderWarehouse(){
+  const [orders, { data: reservations, error }] = await Promise.all([
+    loadOrdersFull(null, null),
+    sb.from('costco_warehouse_reservations').select('*'),
+  ]);
+  if(error){ toast(friendlyError(error),'err'); return; }
+  const canManage = can('admin','shipping_manager');
+  const activeOrders = orders.filter(o=>o.status!=='취소');
+
+  const byOrderNo = {};
+  activeOrders.forEach(o=>{
+    if(!byOrderNo[o.order_no]) byOrderNo[o.order_no] = { order_no:o.order_no, planned_ship_date:o.planned_ship_date, destination_id:o.destination_id, country_id:o.country_id };
+    if(o.planned_ship_date < byOrderNo[o.order_no].planned_ship_date) byOrderNo[o.order_no].planned_ship_date = o.planned_ship_date;
+  });
+  const resMap = {};
+  (reservations||[]).forEach(r=>{ resMap[r.order_no] = r; });
+
+  const rows = Object.values(byOrderNo).sort((a,b)=> (a.planned_ship_date||'') < (b.planned_ship_date||'') ? -1 : 1);
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head"><h3>입고예약 현황</h3></div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>발주번호</th><th>출고예정일</th><th>납품처</th><th>예약상태</th><th></th></tr></thead>
+        <tbody>
+        ${rows.length? rows.map(r=>{
+          const res = resMap[r.order_no];
+          const status = res ? res.reservation_status : '미완료';
+          return `
+          <tr>
+            <td>${esc(r.order_no)}</td>
+            <td>${fmtDateDisp(r.planned_ship_date)}</td>
+            <td>${esc(destinationName(r.destination_id))}</td>
+            <td>${status==='예약완료'?'<span class="badge b-green">예약완료</span>':'<span class="badge b-amber">미완료</span>'}</td>
+            <td>${canManage?`<button class="btn btn-ghost btn-sm" onclick="toggleReservation('${esc(r.order_no)}','${status==='예약완료'?'미완료':'예약완료'}')">${status==='예약완료'?'미완료로 변경':'예약완료로 변경'}</button>`:''}</td>
+          </tr>`;
+        }).join('') : `<tr><td colspan="5" class="empty-row">발주가 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+async function toggleReservation(orderNo, newStatus){
+  try{
+    if(newStatus==='미완료'){
+      const { data: orders, error: oErr } = await sb.from('costco_orders').select('id').eq('order_no', orderNo);
+      if(oErr) throw oErr;
+      const orderIds = (orders||[]).map(o=>o.id);
+      if(orderIds.length){
+        const { data: dispatched, error: dErr } = await sb.from('costco_pallets').select('id').in('order_id', orderIds).eq('status','출고완료');
+        if(dErr) throw dErr;
+        if(dispatched && dispatched.length){
+          toast('이미 출고완료된 발주는 입고예약을 해제할 수 없습니다.','err');
+          return;
+        }
+      }
+    }
+    const { error } = await sb.from('costco_warehouse_reservations')
+      .upsert({ order_no: orderNo, reservation_status: newStatus, updated_by: STATE.profile.id, updated_at: new Date().toISOString() }, { onConflict: 'order_no' });
+    if(error) throw error;
+    toast('예약상태가 변경되었습니다.','ok'); switchTab('warehouse');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+</script>
+<script>
+/* ============================================================
+   추적관리
+   ============================================================ */
+let TRACK_VIEW = 'pallet';
+let TRACK_QUERY = '';
+
+async function renderTracking(){
+  const html = `
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      ${[['pallet','파렛트일련번호 조회'],['serial','일련번호(LOT) 조회'],['ship','출고일 조회'],['order','발주번호 조회']].map(([k,label])=>`
+        <button class="btn ${TRACK_VIEW===k?'btn-primary':'btn-ghost'} btn-sm" onclick="TRACK_VIEW='${k}'; TRACK_QUERY=''; renderTracking()">${label}</button>
+      `).join('')}
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h3>${TRACK_VIEW==='pallet'?'파렛트일련번호로 조회':TRACK_VIEW==='serial'?'일련번호로 조회':TRACK_VIEW==='ship'?'출고일로 조회':'발주번호로 조회'}</h3>
+        <div class="toolbar">
+          <input type="${TRACK_VIEW==='ship'?'date':'text'}" id="trackInput" placeholder="${TRACK_VIEW==='pallet'?'파렛트일련번호':TRACK_VIEW==='serial'?'일련번호':TRACK_VIEW==='order'?'발주번호':''}" value="${esc(TRACK_QUERY)}">
+          <button class="btn btn-primary btn-sm" onclick="runTrackSearch()">조회</button>
+        </div>
+      </div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>파렛트일련번호</th><th>LOT일련번호</th><th>파렛트유형</th><th>국가</th><th>생산일</th><th>소비기한</th><th>발주번호</th><th>출고예정일</th><th>실제출고일</th><th>상태</th></tr></thead>
+        <tbody id="trackResultsBody"><tr><td colspan="10" class="empty-row">검색어를 입력하고 조회해 주세요.</td></tr></tbody>
+      </table></div></div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+  document.getElementById('trackInput').addEventListener('keydown', e=>{ if(e.key==='Enter') runTrackSearch(); });
+}
+
+async function runTrackSearch(){
+  const q = document.getElementById('trackInput').value.trim();
+  TRACK_QUERY = q;
+  if(!q){ toast('검색어를 입력해 주세요.','err'); return; }
+  const tbody = document.getElementById('trackResultsBody');
+  tbody.innerHTML = `<tr><td colspan="10" class="empty-row">조회 중...</td></tr>`;
+  try{
+    let pallets = [];
+    if(TRACK_VIEW==='pallet'){
+      const { data, error } = await sb.from('costco_pallets').select('*, costco_pallet_lots(*)').ilike('pallet_no', `%${q}%`).is('deleted_at', null);
+      if(error) throw error;
+      pallets = data||[];
+    }else if(TRACK_VIEW==='serial'){
+      const { data: lots, error } = await sb.from('costco_pallet_lots').select('pallet_id').ilike('serial_no', `%${q}%`);
+      if(error) throw error;
+      const ids = [...new Set((lots||[]).map(l=>l.pallet_id))];
+      if(ids.length){
+        const { data, error: pErr } = await sb.from('costco_pallets').select('*, costco_pallet_lots(*)').in('id', ids).is('deleted_at', null);
+        if(pErr) throw pErr;
+        pallets = data||[];
+      }
+    }else if(TRACK_VIEW==='order'){
+      const { data: orders, error } = await sb.from('costco_orders').select('id').ilike('order_no', `%${q}%`);
+      if(error) throw error;
+      const orderIds = (orders||[]).map(o=>o.id);
+      if(orderIds.length){
+        const { data, error: pErr } = await sb.from('costco_pallets').select('*, costco_pallet_lots(*)').in('order_id', orderIds).is('deleted_at', null);
+        if(pErr) throw pErr;
+        pallets = data||[];
+      }
+    }else if(TRACK_VIEW==='ship'){
+      const { data: dp, error } = await sb.from('costco_dispatches').select('id, actual_ship_date, costco_dispatch_pallets(pallet_id)').eq('actual_ship_date', q);
+      if(error) throw error;
+      const ids = (dp||[]).flatMap(d=>(d.costco_dispatch_pallets||[]).map(x=>x.pallet_id));
+      if(ids.length){
+        const { data, error: pErr } = await sb.from('costco_pallets').select('*, costco_pallet_lots(*)').in('id', ids).is('deleted_at', null);
+        if(pErr) throw pErr;
+        pallets = data||[];
+      }
+    }
+    if(!pallets.length){ tbody.innerHTML = `<tr><td colspan="10" class="empty-row">조회 결과가 없습니다.</td></tr>`; return; }
+
+    const orderIds = [...new Set(pallets.map(p=>p.order_id).filter(Boolean))];
+    let orderMap = {};
+    if(orderIds.length){
+      const { data: orders } = await sb.from('costco_orders').select('*').in('id', orderIds);
+      (orders||[]).forEach(o=>{ orderMap[o.id] = o; });
+    }
+    const palletIds = pallets.map(p=>p.id);
+    const { data: dispatchLinks } = await sb.from('costco_dispatch_pallets').select('pallet_id, costco_dispatches(actual_ship_date)').in('pallet_id', palletIds);
+    const dispatchMap = {};
+    (dispatchLinks||[]).forEach(l=>{ dispatchMap[l.pallet_id] = l.costco_dispatches?.actual_ship_date; });
+
+    pallets.sort((a,b)=> a.pallet_no < b.pallet_no ? -1 : 1);
+    tbody.innerHTML = pallets.map(p=>{
+      const order = p.order_id ? orderMap[p.order_id] : null;
+      const serials = (p.costco_pallet_lots||[]).map(l=>l.serial_no).filter(Boolean).join(', ') || '-';
+      return `
+        <tr>
+          <td>${esc(p.pallet_no)}</td>
+          <td>${esc(serials)}</td>
+          <td>${esc(productName(p.product_id))}</td>
+          <td>${esc(countryName(p.country_id))}</td>
+          <td>${fmtDateDisp(p.production_date)}</td>
+          <td>${palletExpirationDisplay(p)}</td>
+          <td>${order?esc(order.order_no):'-'}</td>
+          <td>${order?fmtDateDisp(order.planned_ship_date):'-'}</td>
+          <td>${dispatchMap[p.id]?fmtDateDisp(dispatchMap[p.id]):'-'}</td>
+          <td>${palletStatusBadge2(p.status)}</td>
+        </tr>`;
+    }).join('');
+  }catch(e){ tbody.innerHTML = `<tr><td colspan="10" class="empty-row">${esc(friendlyError(e))}</td></tr>`; }
+}
+</script>
+<script>
+/* ============================================================
+   분석
+   ============================================================ */
+let ANALYTICS_MONTHS = 6;
+function lastNMonthKeys(n){
+  const t = todayKST();
+  const [y,m] = t.slice(0,7).split('-').map(Number);
+  const keys = [];
+  for(let i=n-1;i>=0;i--){
+    let yy=y, mm=m-i;
+    while(mm<1){ mm+=12; yy--; }
+    keys.push(`${yy}-${String(mm).padStart(2,'0')}`);
+  }
+  return keys;
+}
+function lineChartSvg(months, values, color){
+  const w = Math.max(520, months.length*80), h = 230, padL=44, padR=20, padT=20, padB=36;
+  const max = Math.max(1, ...values);
+  const xStep = (w-padL-padR) / Math.max(1, months.length-1);
+  const yScale = v => padT + (h-padT-padB) * (1 - v/max);
+  const points = values.map((v,i)=> `${padL+i*xStep},${yScale(v)}`).join(' ');
+  const dots = values.map((v,i)=>`<circle cx="${padL+i*xStep}" cy="${yScale(v)}" r="4" fill="${color}"/>
+    <text x="${padL+i*xStep}" y="${yScale(v)-10}" text-anchor="middle" font-size="11" font-weight="600" fill="var(--ink)">${v}</text>`).join('');
+  const xLabels = months.map((m,i)=>`<text x="${padL+i*xStep}" y="${h-padB+18}" text-anchor="middle" font-size="11" fill="var(--ink-soft)">${m.slice(5)}월</text>`).join('');
+  const gridY = [0,0.25,0.5,0.75,1].map(f=>{
+    const y = padT + (h-padT-padB)*(1-f);
+    const val = Math.round(max*f);
+    return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#eef0f3" stroke-width="1"/>
+      <text x="${padL-8}" y="${y+4}" text-anchor="end" font-size="10" fill="var(--ink-soft)">${val}</text>`;
+  }).join('');
+  return `<div style="overflow-x:auto;"><svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      ${gridY}
+      <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5"/>
+      ${dots}
+      ${xLabels}
+    </svg></div>`;
+}
+function barChartSvg(months, seriesMap, keyIds, nameFn){
+  if(!keyIds.length) return `<p class="helper-text" style="padding:12px 0;">표시할 데이터가 없습니다.</p>`;
+  const w = Math.max(520, months.length*Math.max(70, keyIds.length*24)), h=250, padL=44, padR=20, padT=20, padB=54;
+  const allVals = [];
+  months.forEach(m=>keyIds.forEach(k=>allVals.push((seriesMap[m]&&seriesMap[m][k])||0)));
+  const max = Math.max(1, ...allVals);
+  const groupW = (w-padL-padR)/months.length;
+  const barW = Math.min(30, groupW/(keyIds.length+1));
+  const yScale = v => padT + (h-padT-padB)*(1-v/max);
+  const bars = months.map((m,mi)=>{
+    const groupX = padL + mi*groupW;
+    return keyIds.map((k,ki)=>{
+      const v = (seriesMap[m]&&seriesMap[m][k])||0;
+      const x = groupX + ki*barW + (groupW - keyIds.length*barW)/2;
+      const y = yScale(v);
+      const barH = (h-padB) - y;
+      return `<rect x="${x}" y="${y}" width="${Math.max(barW-3,2)}" height="${Math.max(barH,0)}" fill="${DONUT_COLORS[ki%DONUT_COLORS.length]}" rx="2"/>
+        ${v>0?`<text x="${x+(barW-3)/2}" y="${y-4}" text-anchor="middle" font-size="9.5" fill="var(--ink-soft)">${v}</text>`:''}`;
+    }).join('');
+  }).join('');
+  const gridY = [0,0.25,0.5,0.75,1].map(f=>{
+    const y = padT + (h-padT-padB)*(1-f);
+    const val = Math.round(max*f);
+    return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#eef0f3" stroke-width="1"/>
+      <text x="${padL-8}" y="${y+4}" text-anchor="end" font-size="10" fill="var(--ink-soft)">${val}</text>`;
+  }).join('');
+  const xLabels = months.map((m,mi)=>`<text x="${padL+mi*groupW+groupW/2}" y="${h-padB+18}" text-anchor="middle" font-size="11" fill="var(--ink-soft)">${m.slice(5)}월</text>`).join('');
+  const totals = months.map(m=> keyIds.reduce((a,k)=>a+((seriesMap[m]&&seriesMap[m][k])||0),0));
+  const trendPoints = totals.map((v,mi)=> `${padL+mi*groupW+groupW/2},${yScale(v)}`).join(' ');
+  const trendDots = totals.map((v,mi)=>{
+    const x = padL+mi*groupW+groupW/2, y = yScale(v);
+    return `<circle cx="${x}" cy="${y}" r="4" fill="var(--red)" stroke="#fff" stroke-width="1.5"/>
+      <text x="${x}" y="${y-10}" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--red)">${v}</text>`;
+  }).join('');
+  const trendLine = `<polyline points="${trendPoints}" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 3"/>${trendDots}`;
+  const legend = keyIds.map((k,ki)=>`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:14px;font-size:11.5px;color:var(--ink-soft);"><span style="width:9px;height:9px;border-radius:2px;background:${DONUT_COLORS[ki%DONUT_COLORS.length]};display:inline-block;"></span>${esc(nameFn(k))}</span>`).join('')
+    + `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:14px;font-size:11.5px;color:var(--ink-soft);"><span style="width:14px;height:2px;background:var(--red);display:inline-block;"></span>합계 추이</span>`;
+  return `<div style="overflow-x:auto;"><svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      ${gridY}${bars}${trendLine}${xLabels}
+    </svg></div>
+    <div style="margin-top:8px;">${legend}</div>`;
+}
+async function renderAnalytics(){
+  const months = lastNMonthKeys(ANALYTICS_MONTHS);
+  const rangeFrom = months[0]+'-01';
+  const rangeTo = lastDayOfMonthISO(months[months.length-1]);
+
+  const [dispatches, dispatchPallets, pallets, orders] = await Promise.all([
+    sb.from('costco_dispatches').select('id, actual_ship_date, order_id').gte('actual_ship_date', rangeFrom).lte('actual_ship_date', rangeTo).then(r=>r.data||[]),
+    sb.from('costco_dispatch_pallets').select('dispatch_id, pallet_id').then(r=>r.data||[]),
+    sb.from('costco_pallets').select('id, product_id, country_id, production_date, status').is('deleted_at', null).then(r=>r.data||[]),
+    sb.from('costco_orders').select('id, destination_id').then(r=>r.data||[]),
+  ]);
+  const palletById = {}; pallets.forEach(p=>palletById[p.id]=p);
+  const orderById = {}; orders.forEach(o=>orderById[o.id]=o);
+  const dispatchById = {}; dispatches.forEach(d=>dispatchById[d.id]=d);
+
+  // 출고 집계
+  const shipByMonth = {}, shipByMonthCountry = {}, shipByMonthProduct = {}, shipByMonthDest = {};
+  dispatchPallets.forEach(dp=>{
+    const d = dispatchById[dp.dispatch_id];
+    if(!d || !d.actual_ship_date) return;
+    const month = d.actual_ship_date.slice(0,7);
+    if(!months.includes(month)) return;
+    const p = palletById[dp.pallet_id];
+    const o = orderById[d.order_id];
+    shipByMonth[month] = (shipByMonth[month]||0)+1;
+    if(p){
+      shipByMonthCountry[month] = shipByMonthCountry[month]||{};
+      shipByMonthCountry[month][p.country_id] = (shipByMonthCountry[month][p.country_id]||0)+1;
+      shipByMonthProduct[month] = shipByMonthProduct[month]||{};
+      shipByMonthProduct[month][p.product_id] = (shipByMonthProduct[month][p.product_id]||0)+1;
+    }
+    if(o){
+      shipByMonthDest[month] = shipByMonthDest[month]||{};
+      shipByMonthDest[month][o.destination_id] = (shipByMonthDest[month][o.destination_id]||0)+1;
+    }
+  });
+
+  // 생산 집계 (파렛트 생산일 기준, 취소 제외)
+  const prodByMonth = {}, prodByMonthCountry = {};
+  pallets.filter(p=>p.status!=='취소' && p.production_date).forEach(p=>{
+    const month = p.production_date.slice(0,7);
+    if(!months.includes(month)) return;
+    prodByMonth[month] = (prodByMonth[month]||0)+1;
+    prodByMonthCountry[month] = prodByMonthCountry[month]||{};
+    prodByMonthCountry[month][p.country_id] = (prodByMonthCountry[month][p.country_id]||0)+1;
+  });
+
+  const allCountryIds = [...new Set(pallets.map(p=>p.country_id).filter(Boolean))];
+  const allProductIds = [...new Set(pallets.map(p=>p.product_id).filter(Boolean))];
+  const allDestIds = [...new Set(orders.map(o=>o.destination_id).filter(Boolean))];
+  const shipTotals = months.map(m=>shipByMonth[m]||0);
+  const prodTotals = months.map(m=>prodByMonth[m]||0);
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>조회 기간</h3>
+        <div class="toolbar">
+          <select onchange="ANALYTICS_MONTHS=parseInt(this.value); switchTab('analytics')">
+            <option value="3" ${ANALYTICS_MONTHS===3?'selected':''}>최근 3개월</option>
+            <option value="6" ${ANALYTICS_MONTHS===6?'selected':''}>최근 6개월</option>
+            <option value="12" ${ANALYTICS_MONTHS===12?'selected':''}>최근 12개월</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>총 출고량 (월별 추이)</h3></div>
+      <div class="panel-body">${lineChartSvg(months, shipTotals, 'var(--green)')}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>국가별 출고량</h3></div>
+      <div class="panel-body">${barChartSvg(months, shipByMonthCountry, allCountryIds, countryName)}</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>총 생산량 (월별 추이)</h3></div>
+      <div class="panel-body">${lineChartSvg(months, prodTotals, 'var(--blue)')}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>국가별 생산량</h3></div>
+      <div class="panel-body">${barChartSvg(months, prodByMonthCountry, allCountryIds, countryName)}</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h3>파렛트유형별 출고량</h3></div>
+      <div class="panel-body">${barChartSvg(months, shipByMonthProduct, allProductIds, productName)}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>납품처별 출고량</h3></div>
+      <div class="panel-body">${barChartSvg(months, shipByMonthDest, allDestIds, destinationName)}</div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+</script>
+<script>
+/* ============================================================
+   이력조회
+   ============================================================ */
+let HISTORY_FILTERS = { periodMode:'month', table:'', action:'', from: todayKST().slice(0,7)+'-01', to: lastDayOfMonthISO(todayKST().slice(0,7)) };
+const HISTORY_TABLE_LABEL = {
+  costco_orders:'발주', costco_production_plans:'생산계획', costco_pallets:'파렛트',
+  costco_pallet_lots:'일련번호', costco_warehouse_reservations:'입고예약', costco_dispatches:'출고',
+};
+const HISTORY_ACTION_LABEL = { INSERT:'등록', UPDATE:'수정', DELETE:'삭제' };
+
+async function renderHistory(){
+  let q = sb.from('costco_audit_logs').select('*, costco_profiles(name, email)').order('created_at', {ascending:false}).limit(300);
+  if(HISTORY_FILTERS.table) q = q.eq('table_name', HISTORY_FILTERS.table);
+  if(HISTORY_FILTERS.action) q = q.eq('action_type', HISTORY_FILTERS.action);
+  if(HISTORY_FILTERS.from) q = q.gte('created_at', HISTORY_FILTERS.from+'T00:00:00');
+  if(HISTORY_FILTERS.to) q = q.lte('created_at', HISTORY_FILTERS.to+'T23:59:59');
+  const [{ data: logs, error }, profileNames] = await Promise.all([q, loadProfileNameMap()]);
+  if(error){ document.getElementById('content').innerHTML = `<div class="empty-state">${esc(friendlyError(error))}</div>`; return; }
+  STATE.cache.historyLogs = logs;
+
+  const html = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>변경 이력</h3>
+        <div class="toolbar">
+          ${periodPickerHtml(HISTORY_FILTERS, 'history', 'HISTORY_FILTERS')}
+          <select onchange="HISTORY_FILTERS.table=this.value; switchTab('history')">
+            <option value="">전체 구분</option>
+            ${Object.entries(HISTORY_TABLE_LABEL).map(([k,l])=>`<option value="${k}" ${HISTORY_FILTERS.table===k?'selected':''}>${l}</option>`).join('')}
+          </select>
+          <select onchange="HISTORY_FILTERS.action=this.value; switchTab('history')">
+            <option value="">전체 작업</option>
+            ${Object.entries(HISTORY_ACTION_LABEL).map(([k,l])=>`<option value="${k}" ${HISTORY_FILTERS.action===k?'selected':''}>${l}</option>`).join('')}
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="exportHistoryCsv()">CSV 다운로드</button>
+        </div>
+      </div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>일시</th><th>작업자</th><th>구분</th><th>작업유형</th><th>변경 내용</th></tr></thead>
+        <tbody>
+        ${logs && logs.length? logs.map(l=>`
+          <tr>
+            <td>${new Date(l.created_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul', hour12:false})}</td>
+            <td>${esc(l.costco_profiles?.name || l.costco_profiles?.email || '-')}</td>
+            <td>${esc(HISTORY_TABLE_LABEL[l.table_name] || l.table_name)}</td>
+            <td>${esc(HISTORY_ACTION_LABEL[l.action_type] || l.action_type)}</td>
+            <td>${summarizeAuditChange(l, profileNames)}</td>
+          </tr>`).join('') : `<tr><td colspan="5" class="empty-row">이력이 없습니다.</td></tr>`}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+function exportHistoryCsv(){
+  const profileNames = STATE.cache.profileNames || {};
+  const rows = (STATE.cache.historyLogs||[]).map(l=>({
+    일시: new Date(l.created_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul', hour12:false}),
+    작업자: l.costco_profiles?.name || l.costco_profiles?.email || '-',
+    구분: HISTORY_TABLE_LABEL[l.table_name] || l.table_name,
+    작업유형: HISTORY_ACTION_LABEL[l.action_type] || l.action_type,
+    변경내용: summarizeAuditChange(l, profileNames).replace(/<[^>]+>/g,''),
+  }));
+  csvDownload(`변경이력_${todayKST()}.csv`, rows);
+}
+const HISTORY_FIELD_LABEL = {
+  costco_orders: {
+    order_no:'발주번호', planned_ship_date:'출고예정일', country_id:'국가', destination_id:'납품처',
+    product_id:'파렛트유형', planned_pallet_count:'발주수량', notes:'비고', status:'상태',
+    production_confirmed:'발주확인', production_confirmed_by:'확인자', production_confirmed_at:'확인일시',
+  },
+  costco_production_plans: {
+    plan_no:'계획번호', planned_production_date:'생산예정일', planned_pallet_count:'계획수량',
+    production_manager:'생산담당자', status:'상태', country_id:'국가', product_id:'파렛트유형',
+  },
+  costco_pallets: {
+    pallet_no:'파렛트번호', status:'상태', order_id:'매칭발주', production_date:'생산일',
+    country_id:'국가', product_id:'파렛트유형',
+  },
+  costco_pallet_lots: { serial_no:'LOT일련번호', quantity:'수량' },
+  costco_warehouse_reservations: { reservation_status:'예약상태', order_no:'발주번호' },
+  costco_dispatches: {
+    actual_ship_date:'실제출고일', order_id:'발주', cancelled_at:'취소일시', cancellation_reason:'취소사유',
+  },
+};
+const HISTORY_STATUS_BADGE_MAP = {
+  '재고보유':'b-green','매칭완료':'b-amber','출고완료':'b-blue','품질보류':'b-red','취소':'b-navy',
+  '계획중':'b-navy','생산완료':'b-blue','예약완료':'b-green','미완료':'b-amber',
+};
+function historyStatusChip(v){
+  if(v===null || v===undefined || v==='') return '<span style="color:var(--ink-soft);">-</span>';
+  const cls = HISTORY_STATUS_BADGE_MAP[v];
+  return cls ? `<span class="badge ${cls}" style="font-size:11px;">${esc(v)}</span>` : esc(String(v));
+}
+function historyFieldLabel(table, key){
+  return (HISTORY_FIELD_LABEL[table]||{})[key] || key;
+}
+function historyFormatValue(table, key, value, profileNames){
+  if(value===null || value===undefined || value==='') return '-';
+  if(key.endsWith('_by') && profileNames){
+    return esc(profileNames[value] || '(알 수 없음)');
+  }
+  if(key.endsWith('_at') || key.includes('date')){
+    const d = String(value).slice(0,10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? fmtDateDisp(d) : esc(String(value));
+  }
+  if(typeof value==='boolean') return value ? '예' : '아니오';
+  if(key==='country_id') return esc(countryName(value));
+  if(key==='product_id') return esc(productName(value));
+  if(key==='destination_id') return esc(destinationName(value));
+  return esc(String(value));
+}
+function historyRowLabel(table, data){
+  if(!data) return '';
+  if(table==='costco_orders') return data.order_no || '';
+  if(table==='costco_production_plans') return data.plan_no || '';
+  if(table==='costco_pallets') return data.pallet_no || '';
+  if(table==='costco_pallet_lots') return data.serial_no || '';
+  if(table==='costco_warehouse_reservations') return data.order_no || '';
+  if(table==='costco_dispatches') return data.actual_ship_date || '';
+  return '';
+}
+function summarizeAuditChange(log, profileNames){
+  const table = log.table_name;
+  const rowLabel = historyRowLabel(table, log.new_data || log.old_data);
+  const prefix = rowLabel ? `<b>${esc(rowLabel)}</b> — ` : '';
+
+  if(log.action_type==='INSERT') return `${prefix}신규 등록되었습니다.`;
+  if(log.action_type==='DELETE') return `${prefix}삭제되었습니다.`;
+
+  const oldD = log.old_data||{}, newD = log.new_data||{};
+  const skip = new Set(['updated_at','updated_by','created_at','created_by','id','deleted_at']);
+  const changedKeys = Object.keys(newD).filter(k=>!skip.has(k) && JSON.stringify(oldD[k])!==JSON.stringify(newD[k]));
+  if(!changedKeys.length) return `${prefix}변경 사항 없음`;
+
+  // ---- 발주확인 3개 필드 변경은 한 문장으로 합쳐서 표시 ----
+  if(table==='costco_orders'){
+    const set = new Set(changedKeys);
+    if(set.has('production_confirmed')){
+      if(newD.production_confirmed===true){
+        const who = historyFormatValue(table,'production_confirmed_by', newD.production_confirmed_by, profileNames);
+        return `${prefix}<span class="badge b-green" style="font-size:11px;">발주확인</span> 처리 (확인자: ${who})`;
+      }else{
+        const who = historyFormatValue(table,'production_confirmed_by', oldD.production_confirmed_by, profileNames);
+        return `${prefix}<span class="badge b-amber" style="font-size:11px;">발주확인 취소</span> (기존 확인자: ${who})`;
+      }
+    }
+  }
+
+  const parts = changedKeys.slice(0,4).map(k=>{
+    const label = historyFieldLabel(table, k);
+    const ov = historyFormatValue(table, k, oldD[k], profileNames);
+    const nv = historyFormatValue(table, k, newD[k], profileNames);
+    const chipKeys = new Set(['status','reservation_status']);
+    if(chipKeys.has(k)) return `${label}: ${historyStatusChip(oldD[k])} → ${historyStatusChip(newD[k])}`;
+    return `${label}: ${ov} → ${nv}`;
+  });
+  return prefix + parts.join(' &nbsp;·&nbsp; ') + (changedKeys.length>4?` 외 ${changedKeys.length-4}건`:'');
+}
+</script>
+</body></html>
