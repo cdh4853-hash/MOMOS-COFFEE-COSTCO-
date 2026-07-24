@@ -186,6 +186,7 @@
   .prod-date-group summary::before{content:'▸';color:var(--ink-soft);font-size:11px;margin-right:2px;}
   .prod-date-group[open] summary::before{content:'▾';}
   .prod-date-group[open] summary{border-bottom:1px solid var(--line);}
+  .prod-date-group-flat .prod-date-head{padding:10px 14px;background:#fafbfc;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);}
   .prod-date-label{font-weight:700;font-size:13.5px;color:var(--ink);}
   .prod-date-meta{font-size:12px;color:var(--ink-soft);}
   .prod-date-meta b{color:var(--ink);font-weight:700;}
@@ -1115,9 +1116,8 @@ async function loadOrdersFull(dateFrom, dateTo){
   return data || [];
 }
 async function loadProfileNameMap(){
-  if(STATE.cache.profileNames) return STATE.cache.profileNames;
   const { data, error } = await sb.from('costco_profiles').select('id, name, email');
-  if(error) return {};
+  if(error) return STATE.cache.profileNames || {};
   const map = {};
   (data||[]).forEach(p=>{ map[p.id] = p.name || p.email || ''; });
   STATE.cache.profileNames = map;
@@ -1146,6 +1146,12 @@ async function loadPalletsFull(filters){
 }
 function availableStockFor(pallets, productId, countryId){
   return (pallets||[]).filter(p=>p.status==='재고보유' && p.product_id===productId && (!countryId || p.country_id===countryId));
+}
+async function loadRecentOrderChanges(){
+  const since = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  const { data, error } = await sb.from('costco_order_change_log').select('*').gte('changed_at', since).order('changed_at', {ascending:false});
+  if(error){ console.error(error); return []; }
+  return data || [];
 }
 function orderCoverage(order, pallets){
   const linked = (pallets||[]).filter(p=>p.order_id===order.id && p.status!=='취소');
@@ -1687,17 +1693,32 @@ async function renderDashboard(){
   const weekStart = startOfWeekISO(today);
   const calWeekStart = addDaysISO(weekStart, DASH_WEEK_OFFSET*7);
 
-  const [ordersAll, plansAll, pallets, reservations] = await Promise.all([
+  const [ordersAll, plansAll, pallets, reservations, orderChangesRaw, profileNames] = await Promise.all([
     loadOrdersFull(null, null),
     loadProductionPlans(null, null),
     loadPalletsFull({}),
     sb.from('costco_warehouse_reservations').select('order_no, reservation_status').then(r=>r.data||[]),
+    loadRecentOrderChanges(),
+    loadProfileNameMap(),
   ]);
   const resvByOrderNo = {};
   reservations.forEach(r=>{ resvByOrderNo[r.order_no] = r.reservation_status; });
   const activeOrders = ordersAll.filter(o=>o.status!=='취소');
   const activePlans = plansAll.filter(p=>p.status!=='취소');
   STATE.cache.dashInv = { activeOrders, activePlans, pallets };
+  STATE.cache.orders = ordersAll;
+
+  // ---- 승인 대기 중인 발주 변경 요청 (출고예정일/납품일) ----
+  const pendingChangeOrders = activeOrders.filter(o=>o.change_status==='대기');
+  const myRejectedChanges = activeOrders.filter(o=>o.change_status==='거절됨' && STATE.profile && o.change_requested_by===STATE.profile.id);
+
+  // ---- 최근 발주 변경(7일 이내, 아직 매칭완료/출고완료 되지 않은 건만) ----
+  const recentOrderChanges = orderChangesRaw.filter(c=>{
+    const ord = activeOrders.find(o=>o.id===c.order_id);
+    if(!ord) return false;
+    const cov = orderCoverage(ord, pallets);
+    return cov.reserved < (ord.planned_pallet_count||0);
+  });
 
   const periodLabel = (DASH_FILTERS.periodMode==='month') ? (DASH_FILTERS.from||'').slice(0,7).replace('-','.')+'월'
     : (DASH_FILTERS.periodMode==='year') ? (DASH_FILTERS.from||'').slice(0,4)+'년'
@@ -1778,6 +1799,56 @@ async function renderDashboard(){
   });
 
   const html = `
+    ${pendingChangeOrders.length? `
+    <div class="panel" style="border-left:4px solid var(--red);">
+      <div class="panel-body">
+        <b style="color:var(--red);">🚨 출고예정일/납품일 변경 승인이 필요합니다 (${pendingChangeOrders.length}건)</b>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px;">
+          ${pendingChangeOrders.map(o=>{
+            const who = profileNames[o.change_requested_by] || '';
+            const when = o.change_requested_at ? fmtDateDisp(o.change_requested_at.slice(0,10)) : '';
+            const canApprove = can('admin') || (STATE.profile && STATE.profile.id === o.production_confirmed_by);
+            return `
+            <div style="padding:10px 12px;background:#fff5f5;border:1px solid #fecaca;border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div>
+                <b>${esc(o.order_no)}</b> · ${esc(orderChangeSummary(o))}
+                <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">요청: ${esc(who)}${when?` · ${esc(when)}`:''}</div>
+              </div>
+              <div>
+                ${canApprove?`
+                  <button class="btn btn-primary btn-sm" onclick="approveOrderChange('${o.id}')">승인</button>
+                  <button class="btn btn-ghost btn-sm" onclick="rejectOrderChange('${o.id}')">거절</button>
+                `:`<button class="btn btn-ghost btn-sm" onclick="switchTab('orders')">발주관리에서 확인</button>`}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    ${myRejectedChanges.length? `
+    <div class="panel" style="border-left:4px solid var(--ink-soft);">
+      <div class="panel-body">
+        <b>❗ 내가 요청한 발주 변경이 거절되었습니다 (${myRejectedChanges.length}건)</b>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px;">
+          ${myRejectedChanges.map(o=>{
+            const rejectedBy = profileNames[o.change_rejected_by] || '';
+            const when = o.change_rejected_at ? fmtDateDisp(o.change_rejected_at.slice(0,10)) : '';
+            return `
+            <div style="padding:10px 12px;background:#f3f4f6;border:1px solid var(--line);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div>
+                <b>${esc(o.order_no)}</b> · 거절됨: ${esc(orderChangeSummary(o))}
+                <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">거절: ${esc(rejectedBy)}${when?` · ${esc(when)}`:''}</div>
+              </div>
+              <div><button class="btn btn-ghost btn-sm" onclick="acknowledgeOrderChangeRejection('${o.id}')">확인</button></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
     ${unmatchedAlerts.length? `
     <div class="panel" style="border-left:4px solid var(--amber);">
       <div class="panel-body">
@@ -1787,6 +1858,23 @@ async function renderDashboard(){
         </div>
         <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="switchTab('dispatch')">출고관리에서 매칭하기</button>
       </div>
+    </div>
+    ` : ''}
+
+    ${recentOrderChanges.length? `
+    <div class="panel" style="border-left:4px solid #0ea5e9;">
+      <div class="panel-head"><h3>최근 발주 변경 (7일 이내)</h3></div>
+      <div class="panel-body pad0"><div class="table-wrap"><table>
+        <thead><tr><th>발주번호</th><th>변경내용</th><th>변경일시</th></tr></thead>
+        <tbody>
+        ${recentOrderChanges.map(c=>`
+          <tr>
+            <td>${esc(c.order_no)}</td>
+            <td>${(c.changes||[]).map(ch=>`${esc(ch.field)}: ${ch.old?fmtDateDisp(ch.old):'-'} → ${ch.new?fmtDateDisp(ch.new):'-'}`).join(' &nbsp;/&nbsp; ')}</td>
+            <td>${fmtDateDisp((c.changed_at||'').slice(0,10))}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div></div>
     </div>
     ` : ''}
 
@@ -1911,8 +1999,8 @@ async function renderOrders(){
     loadProfileNameMap(),
   ]);
   STATE.cache.orders = orders;
-  const canManage = can('admin','shipping_manager');
-  const canConfirm = can('admin','production_manager');
+  const canManage = can('admin','shipping_manager','production_manager');
+  const canConfirm = can('admin','production_manager','shipping_manager');
 
   let rows = orders.map(o=>({ o, fulfill: o.status==='취소' ? null : orderStatusOf(o, pallets) }));
   if(ORDER_FILTERS.q){
@@ -1953,25 +2041,26 @@ async function renderOrders(){
         </div>
       </div>
       <div class="panel-body pad0"><div class="table-wrap"><table>
-        <thead><tr><th>발주번호</th><th>납품요청일</th><th>출고예정일</th><th>납품일</th><th>국가</th><th>납품처</th><th>파렛트유형</th><th>파렛트수량</th><th>상태</th><th>발주확인</th><th></th></tr></thead>
+        <thead><tr><th>발주번호</th><th>납품요청일</th><th>납품일</th><th>출고예정일</th><th>국가</th><th>납품처</th><th>파렛트유형</th><th>파렛트수량</th><th>상태</th><th>발주확인</th><th>변경승인</th><th></th></tr></thead>
         <tbody>
         ${countryKeys.length? countryKeys.map(ck=>`
-          <tr style="background:#fafbfc;"><td colspan="11" style="font-weight:700;">${esc(countryName(ck==='none'?'':ck))} (${groupedByCountry[ck].length}건)</td></tr>
+          <tr style="background:#fafbfc;"><td colspan="12" style="font-weight:700;">${esc(countryName(ck==='none'?'':ck))} (${groupedByCountry[ck].length}건)</td></tr>
           ${groupedByCountry[ck].map(r=>`
           <tr>
             <td>${esc(r.o.order_no)}</td>
             <td>${fmtDateDisp(r.o.requested_delivery_date)}</td>
-            <td>${fmtDateDisp(r.o.planned_ship_date)}</td>
             <td>${r.o.actual_delivery_date?fmtDateDisp(r.o.actual_delivery_date):'<span style="color:var(--ink-soft);">-</span>'}</td>
+            <td>${fmtDateDisp(r.o.planned_ship_date)}</td>
             <td>${esc(countryName(r.o.country_id))}</td>
             <td>${esc(destinationName(r.o.destination_id))}</td>
             <td>${esc(productName(r.o.product_id))}</td>
             <td>${r.o.planned_pallet_count}</td>
             <td>${r.o.status==='취소'?'<span class="badge b-red">취소</span>':orderStatusBadge(r.fulfill)}</td>
             <td>${orderConfirmCell(r.o, profileNames, canConfirm)}</td>
-            <td>${canManage?`<button class="btn btn-ghost btn-sm" onclick="openOrderModal('${r.o.id}')">수정</button>`:''}</td>
+            <td>${orderChangeApprovalCell(r.o, profileNames)}</td>
+            <td>${canManage?`<button class="btn btn-ghost btn-sm" onclick="openOrderModal('${r.o.id}')">수정</button>`:''}${can('admin')?` <button class="btn btn-danger btn-sm" onclick="deleteOrder('${r.o.id}')">삭제</button>`:''}</td>
           </tr>`).join('')}
-        `).join('') : `<tr><td colspan="11" class="empty-row">해당하는 발주가 없습니다.</td></tr>`}
+        `).join('') : `<tr><td colspan="12" class="empty-row">해당하는 발주가 없습니다.</td></tr>`}
         </tbody>
       </table></div></div>
     </div>
@@ -1991,14 +2080,114 @@ function orderConfirmCell(o, profileNames, canConfirm){
     ? `<button class="btn btn-primary btn-sm" onclick="confirmOrder('${o.id}')">발주확인</button>`
     : '<span class="badge b-amber">미확인</span>';
 }
+/* ---------- 발주 변경(출고예정일/납품일) 승인 ---------- */
+function orderChangeSummary(o){
+  const parts = [];
+  if(o.pending_planned_ship_date) parts.push(`출고예정일 ${fmtDateDisp(o.planned_ship_date)}→${fmtDateDisp(o.pending_planned_ship_date)}`);
+  if(o.pending_actual_delivery_date) parts.push(`납품일 ${o.actual_delivery_date?fmtDateDisp(o.actual_delivery_date):'-'}→${fmtDateDisp(o.pending_actual_delivery_date)}`);
+  return parts.join(', ');
+}
+function orderChangeApprovalCell(o, profileNames){
+  if(o.status==='취소') return '';
+  if(o.change_status==='대기'){
+    const who = profileNames[o.change_requested_by] || '';
+    const canApprove = can('admin') || (STATE.profile && STATE.profile.id === o.production_confirmed_by);
+    return `
+      <div style="font-size:11px;color:var(--accent-dark);margin-bottom:4px;">${esc(orderChangeSummary(o))}</div>
+      <div style="font-size:11px;color:var(--ink-soft);margin-bottom:4px;">요청: ${esc(who)}</div>
+      ${canApprove?`
+        <button class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:11px;" onclick="approveOrderChange('${o.id}')">승인</button>
+        <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;" onclick="rejectOrderChange('${o.id}')">거절</button>
+      `:`<span class="badge b-amber">승인대기</span>`}
+    `;
+  }
+  if(o.change_status==='거절됨'){
+    const requestedBy = profileNames[o.change_requested_by] || '';
+    const rejectedBy = profileNames[o.change_rejected_by] || '';
+    const isRequester = STATE.profile && STATE.profile.id === o.change_requested_by;
+    return `
+      <div style="font-size:11px;color:var(--red);margin-bottom:4px;">거절됨: ${esc(orderChangeSummary(o))}</div>
+      <div style="font-size:11px;color:var(--ink-soft);margin-bottom:4px;">요청 ${esc(requestedBy)} → 거절 ${esc(rejectedBy)}</div>
+      ${(isRequester||can('admin'))?`<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;" onclick="acknowledgeOrderChangeRejection('${o.id}')">확인</button>`:`<span class="badge b-red">거절됨</span>`}
+    `;
+  }
+  return '';
+}
+async function approveOrderChange(orderId){
+  const order = (STATE.cache.orders||[]).find(x=>x.id===orderId);
+  if(!order || order.change_status!=='대기'){ toast('승인 대기 중인 변경 요청이 없습니다.','err'); return; }
+  const canApprove = can('admin') || (STATE.profile && STATE.profile.id === order.production_confirmed_by);
+  if(!canApprove){ toast('발주확인자 또는 관리자만 승인할 수 있습니다.','err'); return; }
+  if(!confirm('변경 요청을 승인하고 반영하시겠습니까?\n'+orderChangeSummary(order))) return;
+  const changes = [];
+  const payload = { change_status:null, change_requested_by:null, change_requested_at:null, updated_by: STATE.profile.id };
+  if(order.pending_planned_ship_date){
+    changes.push({ field:'출고예정일', old: order.planned_ship_date, new: order.pending_planned_ship_date });
+    payload.planned_ship_date = order.pending_planned_ship_date;
+  }
+  if(order.pending_actual_delivery_date){
+    changes.push({ field:'납품일', old: order.actual_delivery_date, new: order.pending_actual_delivery_date });
+    payload.actual_delivery_date = order.pending_actual_delivery_date;
+  }
+  payload.pending_planned_ship_date = null;
+  payload.pending_actual_delivery_date = null;
+  try{
+    const { data, error } = await sb.from('costco_orders').update(payload).eq('id', orderId).select();
+    if(error) throw error;
+    if(!data || data.length===0){ toast('저장 권한이 없어 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
+    if(changes.length){
+      const { error: logErr } = await sb.from('costco_order_change_log').insert({
+        order_id: orderId, order_no: order.order_no, changes, changed_by: order.change_requested_by || STATE.profile.id,
+      });
+      if(logErr) console.error(logErr);
+    }
+    toast('변경이 승인되어 반영되었습니다.','ok');
+    switchTab(STATE.currentTab);
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+async function rejectOrderChange(orderId){
+  const order = (STATE.cache.orders||[]).find(x=>x.id===orderId);
+  if(!order || order.change_status!=='대기'){ toast('승인 대기 중인 변경 요청이 없습니다.','err'); return; }
+  const canApprove = can('admin') || (STATE.profile && STATE.profile.id === order.production_confirmed_by);
+  if(!canApprove){ toast('발주확인자 또는 관리자만 거절할 수 있습니다.','err'); return; }
+  if(!confirm('변경 요청을 거절하시겠습니까? (기존 값이 유지되고, 요청자에게 거절 사실이 표시됩니다)')) return;
+  try{
+    const { data, error } = await sb.from('costco_orders').update({
+      change_status:'거절됨', change_rejected_by: STATE.profile.id, change_rejected_at: new Date().toISOString(),
+      updated_by: STATE.profile.id,
+    }).eq('id', orderId).select();
+    if(error) throw error;
+    if(!data || data.length===0){ toast('저장 권한이 없어 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
+    toast('변경 요청이 거절되었습니다.','ok');
+    switchTab(STATE.currentTab);
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
+async function acknowledgeOrderChangeRejection(orderId){
+  const order = (STATE.cache.orders||[]).find(x=>x.id===orderId);
+  if(!order || order.change_status!=='거절됨'){ toast('거절된 변경 요청이 없습니다.','err'); return; }
+  const isRequester = STATE.profile && STATE.profile.id === order.change_requested_by;
+  if(!can('admin') && !isRequester){ toast('요청자 또는 관리자만 확인 처리할 수 있습니다.','err'); return; }
+  try{
+    const { data, error } = await sb.from('costco_orders').update({
+      change_status:null, change_requested_by:null, change_requested_at:null,
+      change_rejected_by:null, change_rejected_at:null,
+      pending_planned_ship_date:null, pending_actual_delivery_date:null, updated_by: STATE.profile.id,
+    }).eq('id', orderId).select();
+    if(error) throw error;
+    if(!data || data.length===0){ toast('저장 권한이 없어 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
+    toast('확인 처리되었습니다.','ok');
+    switchTab(STATE.currentTab);
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
 async function confirmOrder(orderId){
-  if(!can('admin','production_manager')){ toast('발주확인 권한이 없습니다.','err'); return; }
-  const { error } = await sb.from('costco_orders').update({
+  if(!can('admin','production_manager','shipping_manager')){ toast('발주확인 권한이 없습니다.','err'); return; }
+  const { data, error } = await sb.from('costco_orders').update({
     production_confirmed: true,
     production_confirmed_by: STATE.profile.id,
     production_confirmed_at: new Date().toISOString(),
-  }).eq('id', orderId);
+  }).eq('id', orderId).select();
   if(error){ toast(friendlyError(error),'err'); return; }
+  if(!data || data.length===0){ toast('저장 권한이 없어 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
   toast('발주확인 처리되었습니다.','ok');
   switchTab('orders');
 }
@@ -2007,12 +2196,13 @@ async function unconfirmOrder(orderId){
   const isOwner = order && STATE.profile && order.production_confirmed_by === STATE.profile.id;
   if(!can('admin') && !isOwner){ toast('발주확인을 한 담당자 또는 관리자만 취소할 수 있습니다.','err'); return; }
   if(!confirm('발주확인을 취소하시겠습니까?')) return;
-  const { error } = await sb.from('costco_orders').update({
+  const { data, error } = await sb.from('costco_orders').update({
     production_confirmed: false,
     production_confirmed_by: null,
     production_confirmed_at: null,
-  }).eq('id', orderId);
+  }).eq('id', orderId).select();
   if(error){ toast(friendlyError(error),'err'); return; }
+  if(!data || data.length===0){ toast('저장 권한이 없어 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
   toast('발주확인이 취소되었습니다.','ok');
   switchTab('orders');
 }
@@ -2020,7 +2210,7 @@ const debouncedOrderSearch = debounce((v)=>{ ORDER_FILTERS.q=v; switchTab('order
 function exportOrdersCsv(){
   const profileNames = STATE.cache.profileNames || {};
   const rows = (STATE.cache.orderShownRows||[]).map(r=>({
-    발주번호:r.o.order_no, 납품요청일:r.o.requested_delivery_date||'', 출고예정일:r.o.planned_ship_date||'', 납품일:r.o.actual_delivery_date||'',
+    발주번호:r.o.order_no, 납품요청일:r.o.requested_delivery_date||'', 납품일:r.o.actual_delivery_date||'', 출고예정일:r.o.planned_ship_date||'',
     국가:countryName(r.o.country_id), 납품처:destinationName(r.o.destination_id),
     파렛트유형:productName(r.o.product_id), 파렛트수량:r.o.planned_pallet_count, 상태:r.o.status==='취소'?'취소':(r.fulfill||''),
     발주확인:r.o.status==='취소'?'':(r.o.production_confirmed?`확인완료(${profileNames[r.o.production_confirmed_by]||''})`:'미확인'),
@@ -2034,8 +2224,10 @@ async function openOrderModal(orderId){
     <div class="form-grid">
       <div class="field"><label>발주번호 *</label><input type="text" id="ordNo" value="${esc(existing?.order_no||'')}" placeholder="코스트코 발주번호"></div>
       <div class="field"><label>납품요청일 *</label><input type="date" id="ordReqDate" value="${existing?.requested_delivery_date||''}"></div>
-      <div class="field"><label>출고예정일 *</label><input type="date" id="ordShipDate" value="${existing?.planned_ship_date||''}"></div>
       <div class="field"><label>납품일</label><input type="date" id="ordDeliveredDate" value="${existing?.actual_delivery_date||''}"></div>
+      <div class="field"><label>출고예정일 *</label><input type="date" id="ordShipDate" value="${existing?.planned_ship_date||''}"></div>
+      ${existing && existing.change_status==='대기' ? `<div class="field full" style="background:#fff8e6;border:1px solid var(--amber);border-radius:8px;padding:8px 10px;font-size:12.5px;">⏳ 이미 변경 승인 대기 중입니다: ${esc(orderChangeSummary(existing))} — 승인/거절 전까지 추가 변경 요청은 등록되지 않습니다.</div>` : ''}
+      ${existing && existing.production_confirmed && existing.change_status!=='대기' ? `<div class="field full" style="background:#eef6ff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;color:var(--ink-soft);">ℹ 발주확인이 완료된 건입니다. 출고예정일 또는 납품일을 변경하면 발주확인자 승인 후 반영됩니다.</div>` : ''}
       <div class="field"><label>국가 *</label>
         <select id="ordCountry" onchange="onOrderCountryChange()">${activeCountries().map(c=>`<option value="${c.id}" ${existing&&existing.country_id===c.id?'selected':''}>${esc(c.country_name)}</option>`).join('')}</select>
       </div>
@@ -2061,6 +2253,27 @@ function onOrderCountryChange(){
   const sel = document.getElementById('ordDest');
   sel.innerHTML = activeDestinations(countryId).map(d=>`<option value="${d.id}">${esc(d.destination_name)}</option>`).join('');
 }
+async function deleteOrder(orderId){
+  if(!can('admin')){ toast('발주 삭제는 관리자만 가능합니다.','err'); return; }
+  const order = (STATE.cache.orders||[]).find(x=>x.id===orderId);
+  try{
+    const { data: linked, error: lErr } = await sb.from('costco_pallets').select('id, status').eq('order_id', orderId).is('deleted_at', null);
+    if(lErr) throw lErr;
+    const blocking = (linked||[]).filter(p=>p.status==='매칭완료' || p.status==='출고완료');
+    if(blocking.length){
+      toast('이미 매칭완료/출고완료된 파렛트가 연결되어 있어 삭제할 수 없습니다. 출고관리에서 매칭을 먼저 해제해 주세요.','err');
+      return;
+    }
+    if(!confirm(`발주번호 ${order?order.order_no:''} 을(를) 삭제하시겠습니까?\n삭제 후에는 발주 목록/이력에서 더 이상 조회되지 않습니다.`)) return;
+    const { data, error } = await sb.from('costco_orders').update({
+      deleted_at: new Date().toISOString(), updated_by: STATE.profile.id,
+    }).eq('id', orderId).select();
+    if(error) throw error;
+    if(!data || data.length===0){ toast('삭제 권한이 없어 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
+    toast('발주가 삭제되었습니다.','ok');
+    switchTab('orders');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
 async function saveOrder(orderId){
   const order_no = document.getElementById('ordNo').value.trim();
   const requested_delivery_date = document.getElementById('ordReqDate').value;
@@ -2071,8 +2284,10 @@ async function saveOrder(orderId){
   if(!requested_delivery_date){ toast('납품요청일을 입력해 주세요.','err'); return; }
   if(!planned_ship_date){ toast('출고예정일을 입력해 주세요.','err'); return; }
   if(qty<1){ toast('파렛트수량을 입력해 주세요.','err'); return; }
+  const existing = orderId ? (STATE.cache.orders||[]).find(x=>x.id===orderId) : null;
+
   const payload = {
-    order_no, requested_delivery_date, planned_ship_date, actual_delivery_date,
+    order_no, requested_delivery_date,
     country_id: document.getElementById('ordCountry').value,
     destination_id: document.getElementById('ordDest').value || null,
     product_id: document.getElementById('ordProduct').value,
@@ -2082,16 +2297,47 @@ async function saveOrder(orderId){
   };
   const statusEl = document.getElementById('ordStatus');
   if(statusEl) payload.status = statusEl.value;
+
+  // 출고예정일/납품일 변경 여부 확인
+  const shipChanged = existing && planned_ship_date !== (existing.planned_ship_date||'');
+  const deliveredChanged = existing && actual_delivery_date !== (existing.actual_delivery_date||null);
+  const needsApproval = existing && existing.production_confirmed && (shipChanged || deliveredChanged);
+
+  if(needsApproval){
+    if(existing.change_status==='대기'){
+      toast('이미 변경 승인 대기 중인 발주입니다. 승인/거절 후 다시 시도해 주세요.','err');
+      return;
+    }
+    if(existing.change_status==='거절됨'){
+      toast('직전 변경 요청이 거절된 상태입니다. 발주 목록에서 거절 내용을 먼저 확인 처리한 후 다시 요청해 주세요.','err');
+      return;
+    }
+    // 출고예정일/납품일은 즉시 반영하지 않고 승인 대기로 등록, 나머지 항목은 바로 반영
+    payload.pending_planned_ship_date = shipChanged ? planned_ship_date : null;
+    payload.pending_actual_delivery_date = deliveredChanged ? actual_delivery_date : null;
+    payload.change_status = '대기';
+    payload.change_requested_by = STATE.profile.id;
+    payload.change_requested_at = new Date().toISOString();
+  }else{
+    payload.planned_ship_date = planned_ship_date;
+    payload.actual_delivery_date = actual_delivery_date;
+  }
+
   try{
     if(orderId){
-      const { error } = await sb.from('costco_orders').update(payload).eq('id', orderId);
+      const { data, error } = await sb.from('costco_orders').update(payload).eq('id', orderId).select();
       if(error) throw error;
+      if(!data || data.length===0){ toast('저장 권한이 없어 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
     }else{
+      payload.planned_ship_date = planned_ship_date;
+      payload.actual_delivery_date = actual_delivery_date;
       payload.created_by = STATE.profile.id;
       const { error } = await sb.from('costco_orders').insert(payload);
       if(error) throw error;
     }
-    closeModal(); toast('발주가 저장되었습니다.','ok'); switchTab('orders');
+    closeModal();
+    toast(needsApproval ? '나머지 항목은 저장되었고, 출고예정일/납품일 변경은 발주확인자 승인 후 반영됩니다.' : '발주가 저장되었습니다.', 'ok');
+    switchTab('orders');
   }catch(e){ toast(friendlyError(e),'err'); }
 }
 </script>
@@ -2112,7 +2358,7 @@ async function renderProduction(){
   STATE.cache.orders = orders;
   STATE.cache.productionPlans = plans;
   STATE.cache.pallets = pallets;
-  const canManage = can('admin','production_manager');
+  const canManage = can('admin','production_manager','shipping_manager');
 
   // 상단: 미출고 발주 (참고용)
   const activeOrders = orders.filter(o=>o.status!=='취소');
@@ -2239,16 +2485,16 @@ async function renderProduction(){
               </tr>`);
             }).join('');
             return `
-            <details class="prod-date-group">
-              <summary>
+            <div class="prod-date-group prod-date-group-flat">
+              <div class="prod-date-head">
                 <span class="prod-date-label">${date==='미지정'?'날짜 미지정':fmtDateDisp(date)}</span>
                 <span class="prod-date-meta">계획 ${dayPlans.length}건 · 합계 <b>${dayQty}</b>파렛트${doneQty>0?` · 완료 ${doneQty}`:''} · ${countrySummary}</span>
-              </summary>
+              </div>
               <div class="table-wrap"><table>
                 <thead><tr>${can('admin')?'<th><input type="checkbox" onclick="toggleAllPlanChk(this)"></th>':''}<th>파렛트일련번호</th><th>계획번호</th><th>국가</th><th>파렛트유형</th><th>수량</th><th>생산담당자</th><th>상태</th><th></th></tr></thead>
                 <tbody>${rowsHtml}</tbody>
               </table></div>
-            </details>`;
+            </div>`;
           }).join('')}
           `;
         })()}
@@ -2550,7 +2796,7 @@ let INV_FILTERS = { status:'재고보유', productId:'', countryId:'', q:'' };
 async function renderInventory(){
   const pallets = await loadPalletsFull({});
   STATE.cache.pallets = pallets;
-  const canManage = can('admin','production_manager');
+  const canManage = can('admin','production_manager','shipping_manager');
 
   const freeStock = pallets.filter(p=>p.status==='재고보유');
   const stockMap = {};
@@ -2770,7 +3016,7 @@ async function renderDispatch(){
   const activeOrders = orders.filter(o=>o.status!=='취소');
   STATE.cache.orders = orders;
   STATE.cache.pallets = pallets;
-  const canManage = can('admin','shipping_manager');
+  const canManage = can('admin','shipping_manager','production_manager');
 
   let rows = activeOrders.map(o=>{
     const linked = pallets.filter(p=>p.order_id===o.id && p.status!=='취소');
@@ -3054,7 +3300,7 @@ async function renderWarehouse(){
     sb.from('costco_warehouse_reservations').select('*'),
   ]);
   if(error){ toast(friendlyError(error),'err'); return; }
-  const canManage = can('admin','shipping_manager');
+  const canManage = can('admin','shipping_manager','production_manager');
   const activeOrders = orders.filter(o=>o.status!=='취소');
 
   const byOrderNo = {};
@@ -3408,6 +3654,10 @@ const HISTORY_TABLE_LABEL = {
 const HISTORY_ACTION_LABEL = { INSERT:'등록', UPDATE:'수정', DELETE:'삭제' };
 
 async function renderHistory(){
+  if(!can('admin')){
+    document.getElementById('content').innerHTML = `<div class="empty-state"><div class="ic">🔒</div>이력조회는 관리자만 접근할 수 있습니다.</div>`;
+    return;
+  }
   let q = sb.from('costco_audit_logs').select('*, costco_profiles(name, email)').order('created_at', {ascending:false}).limit(300);
   if(HISTORY_FILTERS.table) q = q.eq('table_name', HISTORY_FILTERS.table);
   if(HISTORY_FILTERS.action) q = q.eq('action_type', HISTORY_FILTERS.action);
@@ -3464,9 +3714,12 @@ function exportHistoryCsv(){
 }
 const HISTORY_FIELD_LABEL = {
   costco_orders: {
-    order_no:'발주번호', planned_ship_date:'출고예정일', country_id:'국가', destination_id:'납품처',
+    order_no:'발주번호', requested_delivery_date:'납품요청일', actual_delivery_date:'납품일', planned_ship_date:'출고예정일', country_id:'국가', destination_id:'납품처',
     product_id:'파렛트유형', planned_pallet_count:'발주수량', notes:'비고', status:'상태',
     production_confirmed:'발주확인', production_confirmed_by:'확인자', production_confirmed_at:'확인일시',
+    pending_planned_ship_date:'변경요청(출고예정일)', pending_actual_delivery_date:'변경요청(납품일)',
+    change_status:'변경승인상태', change_requested_by:'변경요청자', change_requested_at:'변경요청일시',
+    change_rejected_by:'변경거절자', change_rejected_at:'변경거절일시',
   },
   costco_production_plans: {
     plan_no:'계획번호', planned_production_date:'생산예정일', planned_pallet_count:'계획수량',
