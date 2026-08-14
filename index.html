@@ -405,9 +405,16 @@ async function nextPalletNumbers(dateISO, count){
   const prefix = 'P' + (dateISO||todayKST()).replace(/-/g,'');
   const { data, error } = await sb.from('costco_pallets').select('pallet_no').ilike('pallet_no', prefix + '%');
   if(error) throw error;
-  const startIdx = (data||[]).length;
+  // 과거 데이터가 꼬여서(중복/누락) "개수"와 "실제 사용된 알파벳"이 안 맞을 수 있으므로
+  // 개수만 믿지 않고 실제 존재하는 번호를 직접 확인하며 빈 자리를 찾는다.
+  const used = new Set((data||[]).map(r=>r.pallet_no));
   const results = [];
-  for(let i=0;i<count;i++){ results.push(prefix + letterSuffix(startIdx + i)); }
+  let i = 0;
+  while(results.length < count){
+    const candidate = prefix + letterSuffix(i);
+    if(!used.has(candidate)){ results.push(candidate); used.add(candidate); }
+    i++;
+  }
   return results;
 }
 async function computePalletPreviewMap(allBatches){
@@ -2773,20 +2780,27 @@ async function savePalletCreation(){
     if(error) throw error;
     const idByNo = {};
     (inserted||[]).forEach(r=>{ idByNo[r.pallet_no] = r.id; });
-    for(const p of PALLET_CREATE_DATA){
-      const pid = idByNo[p.pallet_no];
-      if(!pid) continue;
-      for(const l of p.lots){
-        if(l._deleted || !l.serial_no) continue;
-        const { error: lotErr } = await sb.from('costco_pallet_lots').insert({
-          pallet_id: pid, serial_no: l.serial_no, quantity: l.quantity||0, created_by: STATE.profile.id,
-        });
-        if(lotErr) throw lotErr;
+    try{
+      for(const p of PALLET_CREATE_DATA){
+        const pid = idByNo[p.pallet_no];
+        if(!pid) continue;
+        for(const l of p.lots){
+          if(l._deleted || !l.serial_no) continue;
+          const { error: lotErr } = await sb.from('costco_pallet_lots').insert({
+            pallet_id: pid, serial_no: l.serial_no, quantity: l.quantity||0, created_by: STATE.profile.id,
+          });
+          if(lotErr) throw lotErr;
+        }
+        const expDates = [...new Set(p.lots.filter(l=>!l._deleted && l.serial_no).map(l=>computeExpirationFromSerial(l.serial_no)).filter(Boolean))].sort();
+        if(expDates[0]){
+          await sb.from('costco_pallets').update({expiration_date: expDates[0]}).eq('id', pid);
+        }
       }
-      const expDates = [...new Set(p.lots.filter(l=>!l._deleted && l.serial_no).map(l=>computeExpirationFromSerial(l.serial_no)).filter(Boolean))].sort();
-      if(expDates[0]){
-        await sb.from('costco_pallets').update({expiration_date: expDates[0]}).eq('id', pid);
-      }
+    }catch(innerErr){
+      // 일련번호 저장 중 실패 시, 방금 생성한 파렛트를 롤백해서 다음 시도가 "이미 등록된 값" 오류로 막히지 않게 한다.
+      const ids = (inserted||[]).map(r=>r.id);
+      if(ids.length) await sb.from('costco_pallets').delete().in('id', ids);
+      throw innerErr;
     }
     if(PALLET_CREATE_PLAN_IDS && PALLET_CREATE_PLAN_IDS.length){
       const { error: planErr } = await sb.from('costco_production_plans').update({
