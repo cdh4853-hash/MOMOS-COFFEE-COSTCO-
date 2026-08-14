@@ -431,13 +431,10 @@ async function computePalletPreviewMap(allBatches){
   return map;
 }
 async function palletNumbersForBatch(batch){
-  if(!batch.planned_production_date) return await nextPalletNumbers(null, batch.planned_pallet_count||1);
-  const { data: sameDate, error } = await sb.from('costco_production_plans')
-    .select('id, planned_production_date, planned_pallet_count, status, created_at')
-    .eq('planned_production_date', batch.planned_production_date).neq('status','취소');
-  if(error) throw error;
-  const map = await computePalletPreviewMap(sameDate);
-  return map[batch.id] || await nextPalletNumbers(batch.planned_production_date, batch.planned_pallet_count||1);
+  // 실제 파렛트 생성 시에는 그날 DB에 이미 생성된 파렛트 개수만 기준으로 다음 번호를 매긴다.
+  // (계획을 여러 번 나눠서 완료 처리할 때, 아직 완료되지 않은 잔여 계획 수량이
+  //  알파벳 자리를 미리 차지해버려서 중복 번호가 발생하던 버그 수정)
+  return await nextPalletNumbers(batch.planned_production_date, batch.planned_pallet_count||1);
 }
 function computeExpirationFromSerial(serial){
   if(!serial) return null;
@@ -2480,6 +2477,7 @@ async function renderProduction(){
                 <td>
                   ${canManage && p.status==='계획중' ? `<button class="btn btn-ghost btn-sm" onclick="openProductionPlanModal('${p.id}')">수정</button>
                     <button class="btn btn-primary btn-sm" onclick="confirmProductionPlanUnit('${p.id}')">생산완료</button>`:''}
+                  ${canManage && p.status==='생산완료' ? `<button class="btn btn-ghost btn-sm" onclick="retractProductionPlanUnit('${p.id}')">회수</button>`:''}
                   ${can('admin') && p.status==='계획중' ? `<button class="btn btn-danger btn-sm" onclick="deletePlanUnit('${p.id}')">삭제</button>`:''}
                 </td>
               </tr>`);
@@ -2609,6 +2607,37 @@ function deleteProductionPlan(planId){
   }, {danger:true, confirmLabel:'삭제'});
 }
 
+async function retractProductionPlanUnit(planId){
+  if(!can('admin','production_manager','shipping_manager')){ toast('생산완료 회수 권한이 없습니다.','err'); return; }
+  try{
+    const { data: plan, error: pErr } = await sb.from('costco_production_plans').select('*').eq('id', planId).single();
+    if(pErr) throw pErr;
+    if(plan.status!=='생산완료'){ toast('생산완료 상태인 계획만 회수할 수 있습니다.','err'); return; }
+    const { data: linkedPallets, error: lErr } = await sb.from('costco_pallets').select('id, pallet_no, status').eq('production_plan_id', planId).is('deleted_at', null);
+    if(lErr) throw lErr;
+    const used = (linkedPallets||[]).filter(p=>p.status!=='재고보유');
+    if(used.length){
+      toast(`이미 매칭/출고 등으로 재고가 사용된 파렛트(${used.map(p=>p.pallet_no).join(', ')})가 있어 회수할 수 없습니다.`,'err');
+      return;
+    }
+    if(!confirm(`계획번호 ${plan.plan_no} (${(linkedPallets||[]).length}개 파렛트)을(를) 생산완료 전으로 되돌리시겠습니까?\n생성된 파렛트는 삭제되고, 계획은 다시 '계획중' 상태가 됩니다.`)) return;
+
+    if(linkedPallets && linkedPallets.length){
+      const { data: pd, error: dErr } = await sb.from('costco_pallets').update({
+        deleted_at: new Date().toISOString(), updated_by: STATE.profile.id,
+      }).in('id', linkedPallets.map(p=>p.id)).select();
+      if(dErr) throw dErr;
+      if(!pd || pd.length !== linkedPallets.length){ toast('파렛트 삭제 권한이 없어 회수가 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
+    }
+    const { data, error } = await sb.from('costco_production_plans').update({
+      status:'계획중', confirmed_at:null, confirmed_by:null, updated_by: STATE.profile.id,
+    }).eq('id', planId).select();
+    if(error) throw error;
+    if(!data || data.length===0){ toast('저장 권한이 없어 반영되지 않았습니다. 관리자에게 DB 권한 확인을 요청해 주세요.','err'); return; }
+    toast('생산완료가 회수되어 계획중 상태로 되돌아갔습니다.','ok');
+    switchTab('production');
+  }catch(e){ toast(friendlyError(e),'err'); }
+}
 function confirmProductionPlanUnit(planId){
   processProductionCompletion({ [planId]: 1 });
 }
@@ -2876,7 +2905,7 @@ async function renderInventory(){
                 <td>${palletExpirationDisplay(p)}</td>
                 <td>${(p.costco_pallet_lots||[]).length}</td>
                 <td>${palletStatusBadge2(p.status)}</td>
-                <td>${canManage?`<button class="btn btn-ghost btn-sm" onclick="openInventoryPalletModal('${p.id}')">수정</button>`:''}</td>
+                <td>${canManage?`<button class="btn btn-ghost btn-sm" onclick="openInventoryPalletModal('${p.id}')">수정</button>`:''}${can('admin') && p.status==='재고보유'?` <button class="btn btn-danger btn-sm" onclick="deleteInventoryPallet('${p.id}')">삭제</button>`:''}</td>
               </tr>`).join('');
             return `
             <details class="prod-date-group">
@@ -2896,6 +2925,24 @@ async function renderInventory(){
     </div>
   `;
   document.getElementById('content').innerHTML = html;
+}
+async function deleteInventoryPallet(palletId){
+  if(!can('admin')){ toast('파렛트 삭제는 관리자만 가능합니다.','err'); return; }
+  const pallet = (STATE.cache.pallets||[]).find(x=>x.id===palletId);
+  if(pallet && pallet.status!=='재고보유'){ toast('여유재고(미매칭) 상태의 파렛트만 삭제할 수 있습니다.','err'); return; }
+  if(!confirm(`파렛트 ${pallet?pallet.pallet_no:''} 을(를) 삭제하시겠습니까?\n삭제 후에는 재고 목록/이력에서 더 이상 조회되지 않습니다.`)) return;
+  const pw = prompt('삭제하려면 비밀번호를 입력해 주세요.');
+  if(pw===null) return;
+  if(pw!=='486'){ toast('비밀번호가 일치하지 않아 삭제가 취소되었습니다.','err'); return; }
+  try{
+    const { data, error } = await sb.from('costco_pallets').update({
+      deleted_at: new Date().toISOString(), updated_by: STATE.profile.id,
+    }).eq('id', palletId).eq('status','재고보유').select();
+    if(error) throw error;
+    if(!data || data.length===0){ toast('삭제 권한이 없거나 이미 상태가 변경되어 반영되지 않았습니다.','err'); return; }
+    toast('파렛트가 삭제되었습니다.','ok');
+    switchTab('inventory');
+  }catch(e){ toast(friendlyError(e),'err'); }
 }
 const debouncedInvSearch = debounce((v)=>{ INV_FILTERS.q=v; switchTab('inventory'); }, 400);
 function exportInventoryCsv(){
